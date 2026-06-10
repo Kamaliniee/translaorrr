@@ -1,0 +1,1621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DocTranslate Enterprise — Dashboard</title>
+
+  <!-- CDNs for CSS, Icons, Fonts -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <!-- ChartJS for usage reports -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root {
+      --primary:        #dc2626;
+      --primary-hover:  #b91c1c;
+      --primary-soft:   #fef2f2;
+      --primary-mid:    #fecaca;
+      --sidebar-bg:     #7f1d1d;
+      --accent:         #ef4444;
+      --success:        #10b981;
+      --success-soft:   #ecfdf5;
+      --warning:        #f59e0b;
+      --warning-soft:   #fffbeb;
+      --danger:         #ef4444;
+      --danger-soft:    #fef2f2;
+      --sidebar-w:      260px;
+      --bg:             #f8fafc;
+      --surface:        #ffffff;
+      --border:         #e2e8f0;
+      --text:           #0f172a;
+      --muted:          #64748b;
+      --font:           'Outfit', sans-serif;
+      --mono:           'JetBrains Mono', monospace;
+      --radius:         16px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Scrollbars ── */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      position: fixed;
+      top: 0; left: 0;
+      width: var(--sidebar-w);
+      height: 100vh;
+      background: var(--sidebar-bg);
+      display: flex;
+      flex-direction: column;
+      z-index: 200;
+      border-right: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .sidebar-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 24px 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .brand-mark {
+      width: 38px; height: 38px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff;
+      font-size: 18px;
+      box-shadow: 0 4px 12px rgba(37,99,235,0.3);
+    }
+    .brand-name {
+      font-size: 16px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -0.3px;
+    }
+
+    .user-pill {
+      margin: 16px 16px 8px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius);
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .user-avatar {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .user-info { display: flex; flex-direction: column; }
+    .user-title { font-size: 13px; font-weight: 600; color: #fff; line-height: 1.2; }
+    .user-dept { font-size: 10px; color: rgba(255,255,255,0.4); }
+    .role-badge {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      margin-top: 3px;
+      align-self: flex-start;
+    }
+    .badge-admin   { background: var(--danger-soft); color: var(--danger); }
+    .badge-manager { background: var(--warning-soft); color: var(--warning); }
+    .badge-staff   { background: var(--success-soft); color: var(--success); }
+
+    .nav-header {
+      font-size: 10px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.3);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 16px 20px 8px;
+    }
+
+    .sidebar-menu { display: flex; flex-direction: column; gap: 4px; padding: 0 10px; }
+    .menu-link {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.6);
+      text-decoration: none;
+      border-radius: 10px;
+      transition: all 0.15s;
+      cursor: pointer;
+      background: none; border: none; width: 100%; text-align: left;
+    }
+    .menu-link i { font-size: 16px; transition: color 0.15s; }
+    .menu-link:hover { color: #fff; background: rgba(255,255,255,0.05); }
+    .menu-link.active {
+      color: #fff;
+      background: var(--primary);
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(37,99,235,0.25);
+    }
+    .menu-link.locked { opacity: 0.4; cursor: not-allowed; }
+    .menu-link.locked:hover { background: none; color: rgba(255,255,255,0.6); }
+    .menu-link .lock-icon { font-size: 11px; margin-left: auto; opacity: 0.6; }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding: 16px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    .btn-signout {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; padding: 10px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px;
+      background: none; color: rgba(255,255,255,0.6);
+      font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .btn-signout:hover {
+      background: rgba(239,68,68,0.15);
+      border-color: rgba(239,68,68,0.4);
+      color: #fca5a5;
+    }
+
+    /* ── Main View ── */
+    .main-viewport {
+      margin-left: var(--sidebar-w);
+      min-height: 100vh;
+      padding: 30px 40px 60px;
+    }
+
+    .top-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 28px;
+    }
+    .heading-title { font-size: 24px; font-weight: 800; color: var(--text); letter-spacing: -0.5px; }
+    .heading-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+    /* ── Glassmorphic Cards ── */
+    .glass-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+      padding: 24px;
+      transition: all 0.2s ease;
+      margin-bottom: 24px;
+    }
+    .glass-card:hover { box-shadow: 0 8px 30px rgba(0,0,0,0.06); }
+    .card-title {
+      font-size: 15px; font-weight: 700; color: var(--text);
+      display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
+    }
+    .card-title i { font-size: 18px; color: var(--primary); }
+
+    /* ── Statistics Blocks ── */
+    .stat-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-box::after {
+      content: ''; position: absolute; top: 0; right: 0; width: 60px; height: 60px;
+      background: radial-gradient(circle, rgba(37,99,235,0.05) 0%, transparent 70%);
+      border-radius: 50%;
+    }
+    .stat-box-icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; margin-bottom: 16px;
+    }
+    .stat-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+    .stat-value { font-family: var(--mono); font-size: 28px; font-weight: 700; color: var(--text); line-height: 1.1; }
+    .stat-sub { font-size: 11px; color: var(--muted); margin-top: 8px; }
+
+    /* ── Translation Box ── */
+    .input-textarea, .output-box {
+      width: 100%; height: 280px; border-radius: 12px; border: 1.5px solid var(--border);
+      padding: 18px; font-size: 14px; line-height: 1.6; font-family: var(--font); color: var(--text);
+      resize: none; outline: none; background: #fafbfe; transition: all 0.15s;
+    }
+    .input-textarea:focus, .output-box:focus { border-color: var(--primary); background: #fff; box-shadow: 0 0 0 4px rgba(37,99,235,0.08); }
+    
+    .interactive-panel {
+      width: 100%; height: 280px; border-radius: 12px; border: 1.5px solid var(--border);
+      padding: 12px; background: #f8fafc; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+    }
+    .p-review-card {
+      background: #fff; border: 1.5px solid var(--border); border-radius: 10px; padding: 12px;
+      transition: all 0.15s; cursor: pointer; position: relative;
+    }
+    .p-review-card:hover { border-color: var(--primary); box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+    .p-review-card.low-confidence {
+      background: #fffdf5; border-color: #fde047;
+    }
+    .p-review-card.low-confidence::before {
+      content: '⚠️ Review Required'; position: absolute; top: 6px; right: 10px;
+      font-size: 9px; font-weight: 700; color: #a16207; background: #fef08a; padding: 1px 6px; border-radius: 10px;
+    }
+    .p-source { font-size: 11px; color: var(--muted); border-bottom: 1px dashed var(--border); padding-bottom: 6px; margin-bottom: 6px; }
+    .p-target { font-size: 13px; color: var(--text); line-height: 1.5; }
+    .p-score-badge { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 8px; margin-top: 8px; display: inline-block; }
+    .score-high { background: #dcfce7; color: #15803d; }
+    .score-low { background: #fef08a; color: #a16207; }
+
+    /* ── Drop Zone ── */
+    .drop-zone {
+      border: 2px dashed var(--border); border-radius: var(--radius);
+      padding: 36px 20px; text-align: center; cursor: pointer; background: #fafcff;
+      transition: all 0.15s; margin-bottom: 16px; position: relative;
+    }
+    .drop-zone:hover, .drop-zone.drag-over { border-color: var(--primary); background: var(--primary-soft); }
+    .drop-zone i { font-size: 36px; color: var(--primary); display: block; margin-bottom: 12px; }
+    .drop-title { font-size: 14px; font-weight: 700; color: var(--text); }
+    .drop-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .btn-submit-trans {
+      background: var(--primary); color: #fff; border: none; border-radius: 10px;
+      padding: 12px; font-size: 14px; font-weight: 600; width: 100%; display: flex;
+      align-items: center; justify-content: center; gap: 8px; transition: all 0.15s;
+    }
+    .btn-submit-trans:hover { background: var(--primary-hover); }
+
+    /* ── Batch Queue Rows ── */
+    .batch-file-row {
+      background: #f8fafc; border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 16px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .batch-file-info { display: flex; align-items: center; gap: 10px; }
+    .batch-file-icon { font-size: 20px; color: var(--primary); }
+    .batch-file-name { font-size: 13px; font-weight: 600; color: var(--text); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .batch-file-status { font-size: 11px; font-weight: 600; color: var(--muted); }
+    .batch-progress { height: 6px; width: 120px; background: #e2e8f0; border-radius: 10px; overflow: hidden; }
+    .batch-progress-bar { height: 100%; background: var(--success); width: 0%; transition: width 0.3s; }
+
+
+
+    /* ── Tab Panes ── */
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ── Three-Dot Action Menu ── */
+    .action-menu-container {
+      position: relative;
+      display: inline-block;
+    }
+    .action-menu-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 6px;
+      font-size: 16px;
+      color: var(--muted);
+      transition: color 0.15s;
+    }
+    .action-menu-btn:hover {
+      color: var(--primary);
+    }
+    .action-menu-dropdown {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: 30px;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+      z-index: 100;
+      min-width: 180px;
+      overflow: hidden;
+    }
+    .action-menu-container:hover .action-menu-dropdown,
+    .action-menu-dropdown.show {
+      display: block;
+    }
+    .action-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+    }
+    .action-menu-item:hover {
+      background: var(--surface);
+      color: var(--primary);
+    }
+    .action-menu-item i {
+      font-size: 14px;
+      opacity: 0.7;
+    }
+
+    /* ── Translator Tab Buttons ── */
+    .translator-tab-btn.active {
+      color: var(--primary) !important;
+      border-bottom-color: var(--primary) !important;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── SIDEBAR MENU ─────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-mark"><i class="bi bi-translate"></i></div>
+    <span class="brand-name">DocTranslate Enterprise</span>
+  </div>
+
+  <div class="user-pill">
+    <div class="user-avatar">{{ username[:2].upper() }}</div>
+    <div class="user-info">
+      <span class="user-title">{{ username }}</span>
+      <span class="user-dept">Dept: {{ department }}</span>
+      <span class="role-badge {% if role == 'admin' %}badge-admin{% elif role == 'manager' %}badge-manager{% else %}badge-staff{% endif %}">
+        {{ role }}
+      </span>
+    </div>
+  </div>
+
+  <div class="nav-header">Workspace</div>
+  <div class="sidebar-menu">
+    <button class="menu-link active" onclick="switchTab('translate')">
+      <i class="bi bi-translate"></i> Interactive Translator
+    </button>
+    <button class="menu-link" onclick="switchTab('batch')">
+      <i class="bi bi-cloud-upload"></i> Bulk Translation (Batch)
+    </button>
+    {% if role == 'admin' or role == 'manager' %}
+    <button class="menu-link" onclick="switchTab('reports')">
+      <i class="bi bi-bar-chart-line"></i> Usage Analytics & Reports
+    </button>
+    {% else %}
+    <button class="menu-link locked" disabled>
+      <i class="bi bi-bar-chart-line"></i> Usage Analytics & Reports <i class="bi bi-lock lock-icon"></i>
+    </button>
+    {% endif %}
+
+  </div>
+
+  <div class="nav-header">Management</div>
+  <div class="sidebar-menu">
+    <!-- Admin Only Audits -->
+    {% if role == 'admin' %}
+    <button class="menu-link" onclick="switchTab('audit')">
+      <i class="bi bi-shield-check"></i> System Audit Logs
+    </button>
+    {% else %}
+    <button class="menu-link locked" disabled>
+      <i class="bi bi-shield-check"></i> System Audit Logs <i class="bi bi-lock lock-icon"></i>
+    </button>
+    {% endif %}
+
+    <!-- Admin Only User Management -->
+    {% if role == 'admin' %}
+    <button class="menu-link" onclick="switchTab('users')">
+      <i class="bi bi-people"></i> Manage Users
+    </button>
+    {% else %}
+    <button class="menu-link locked" disabled>
+      <i class="bi bi-people"></i> Manage Users <i class="bi bi-lock lock-icon"></i>
+    </button>
+    {% endif %}
+
+    <!-- Admin Only Settings -->
+    
+
+
+  </div>
+
+  <div class="sidebar-footer">
+    <a href="{{ url_for('logout') }}" class="btn-signout">
+      <i class="bi bi-box-arrow-left"></i> Sign out
+    </a>
+  </div>
+</aside>
+
+<!-- ── MAIN VIEWPORT ────────────────────────────────────────── -->
+<main class="main-viewport">
+  
+  <div class="top-header">
+    <div>
+      <div class="heading-title">Enterprise Dashboard</div>
+      <div class="heading-sub">Secure document translations with military-grade PII masking.</div>
+    </div>
+    <div class="d-flex align-items-center gap-3">
+      <div class="position-relative" id="notificationContainer">
+        <button class="btn btn-light btn-sm position-relative" id="notificationBell" onclick="toggleNotificationPanel()" title="Notifications">
+          <i class="bi bi-bell-fill" style="font-size: 18px; color: var(--primary);"></i>
+          <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="notificationBadge" style="display:none; font-size:10px;">0</span>
+        </button>
+        <div class="position-absolute bg-white border rounded-3 shadow-lg p-3" id="notificationPanel" style="display:none; width:320px; max-height:400px; overflow-y:auto; right:0; top:40px; z-index:1000; border:1px solid var(--border);">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <strong style="font-size:13px;">Notifications</strong>
+            <button class="btn btn-sm btn-link p-0" onclick="clearAllNotifications()" title="Clear all">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+          <div id="notificationList" style="max-height:350px; overflow-y:auto;">
+            <div class="text-muted small text-center p-3">No notifications yet</div>
+          </div>
+        </div>
+      </div>
+      <span class="badge rounded-pill bg-light text-dark p-2 border" style="font-size:12px;">
+        <i class="bi bi-clock-history text-primary"></i> <span id="currentDate"></span>
+      </span>
+    </div>
+  </div>
+
+  <!-- Error Alerts -->
+  {% if error %}
+  <div class="alert alert-danger alert-dismissible fade show var-radius" role="alert">
+    <i class="bi bi-exclamation-triangle-fill"></i> <strong>Error:</strong> {{ error }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  </div>
+  {% endif %}
+
+  <!-- ── 1. INTERACTIVE TRANSLATOR TAB ────────────────────── -->
+  <div id="tab-translate" class="tab-pane active">
+    
+    <div class="glass-card">
+      <div class="card-title"><i class="bi bi-translate"></i> Interactive Translation Console</div>
+      
+      <!-- Translator Tabs: Text vs Document -->
+      <div style="display:flex; gap:8px; margin-bottom:24px; border-bottom:2px solid var(--border); padding-bottom:0;">
+        <button onclick="switchTranslatorTab('text')" class="translator-tab-btn active" style="padding:12px 20px; border:none; background:none; font-size:14px; font-weight:600; color:var(--muted); cursor:pointer; border-bottom:3px solid transparent; transition:all 0.15s; margin-bottom:-2px;">
+          <i class="bi bi-chat-quote"></i> Text Translation
+        </button>
+        <button onclick="switchTranslatorTab('document')" class="translator-tab-btn" style="padding:12px 20px; border:none; background:none; font-size:14px; font-weight:600; color:var(--muted); cursor:pointer; border-bottom:3px solid transparent; transition:all 0.15s; margin-bottom:-2px;">
+          <i class="bi bi-file-earmark"></i> Document Translation
+        </button>
+      </div>
+
+      <form method="POST" enctype="multipart/form-data">
+        <!-- Shared Controls -->
+        <div class="row g-3 align-items-center mb-3">
+          <div class="col-md-4">
+            <label class="form-label font-bold small text-muted">Translation Direction</label>
+            <select name="direction" class="form-select">
+              <option value="eng-spa">🇺🇸 English → 🇪🇸 Spanish</option>
+              <option value="spa-eng">🇪🇸 Spanish → 🇺🇸 English</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label font-bold small text-muted">Translation Engine</label>
+            <select name="engine" class="form-select">
+              <option value="google" {% if current_engine == 'google' %}selected{% endif %}>Google Cloud API</option>
+              <option value="deepl" {% if current_engine == 'deepl' %}selected{% endif %}>DeepL Pro API</option>
+              <option value="azure" {% if current_engine == 'azure' %}selected{% endif %}>Microsoft Azure API</option>
+              <option value="libretranslate" {% if current_engine == 'libretranslate' %}selected{% endif %}>LibreTranslate (Local)</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label font-bold small text-muted">Custom Words to Mask (Optional)</label>
+            <input type="text" name="custom_mask_words" class="form-control" placeholder="e.g. projectX, roadmap (comma-separated)">
+          </div>
+        </div>
+
+        <!-- TAB 1: TEXT TRANSLATION -->
+        <div id="translator-tab-text" class="translator-tab-content" style="display:block;">
+          <div class="row g-3">
+            
+            <!-- Source Input -->
+            <div class="col-md-6">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-muted small font-bold">Input Text</span>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="insertSampleText()"><i class="bi bi-pencil-square"></i> Insert Sample PII Text</button>
+              </div>
+              <textarea name="raw_text" class="input-textarea" placeholder="Paste text to translate here..."></textarea>
+              <button type="submit" class="btn-submit-trans mt-3">
+                <i class="bi bi-arrow-right-circle"></i> Translate Text
+              </button>
+            </div>
+
+            <!-- Output Panel -->
+            <div class="col-md-6">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-muted small font-bold">Translated Output</span>
+                <div class="btn-group btn-group-sm">
+                  <button type="button" class="btn btn-outline-primary active" id="viewBtnText" onclick="toggleOutputView('text')">Raw View</button>
+                  <button type="button" class="btn btn-outline-primary" id="viewBtnInteractive" onclick="toggleOutputView('interactive')">Quality Review</button>
+                </div>
+              </div>
+
+              <!-- Standard Output Text -->
+              <div id="outputContainerText">
+                <textarea class="output-box" id="rawOutputBox" readonly placeholder="Translated text will appear here..."></textarea>
+              </div>
+
+              <!-- Interactive Review Panels -->
+              <div id="outputContainerInteractive" style="display:none;">
+                <div class="interactive-panel" id="interactivePanel">
+                  <div class="text-muted small text-center p-4">Submit text to inspect paragraph-by-paragraph confidence scores and warnings.</div>
+                </div>
+              </div>
+
+              <!-- Metadata parameters -->
+              <div class="row g-2 mt-3 font-bold small text-muted" style="background:#f8fafc; padding:12px; border-radius:10px; border:1px solid var(--border);">
+                <div class="col-6"><strong>Words:</strong> <span id="metaWords">0</span></div>
+                <div class="col-6"><strong>Masked:</strong> <span id="metaMasked">0</span></div>
+              </div>
+
+              <div class="d-flex gap-2 mt-3">
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="copyTranslation()"><i class="bi bi-copy"></i> Copy</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- TAB 2: DOCUMENT TRANSLATION -->
+        <div id="translator-tab-document" class="translator-tab-content" style="display:none;">
+          <div class="row g-3">
+            
+            <!-- File Upload -->
+            <div class="col-md-6">
+              <div class="mb-2">
+                <span class="text-muted small font-bold">Upload Document</span>
+              </div>
+              <div class="drop-zone mt-3" id="mainDropZone">
+                <i class="bi bi-file-earmark-arrow-up"></i>
+                <div class="drop-title" id="dropLabel">Upload Document</div>
+                <div class="drop-sub">Drag or select a PDF, Word (.docx), Excel (.xls, .xlsx) or Text file to translate preserving formatting and structure.</div>
+                <input type="file" id="mainFileInput" name="document" accept=".docx,.xls,.xlsx,.txt,.csv,.pdf" style="display:none;">
+              </div>
+              <button type="submit" class="btn-submit-trans mt-3">
+                <i class="bi bi-arrow-right-circle"></i> Upload & Translate
+              </button>
+            </div>
+
+            <!-- Output -->
+            <div class="col-md-6">
+              <div class="mb-2">
+                <span class="text-muted small font-bold">Download Translated Document</span>
+              </div>
+              <div style="background:#f8fafc; border:1.5px dashed var(--border); border-radius:12px; padding:36px 20px; text-align:center; min-height:200px; display:flex; flex-direction:column; justify-content:center; align-items:center;">
+                <i class="bi bi-file-earmark-check" style="font-size:36px; color:var(--primary); margin-bottom:12px;"></i>
+                <div class="text-muted small" id="documentStatus">Upload a document and translate it to see results here.</div>
+              </div>
+              <button type="button" class="btn btn-sm btn-success w-100 mt-3" id="btnDownloadDocument" style="display:none;">
+                <i class="bi bi-file-earmark-arrow-down"></i> Download Translated Document
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+      </form>
+    </div>
+
+  </div>
+
+  <!-- ── 2. BULK BATCH FILE UPLOAD TAB ─────────────────────── -->
+  <div id="tab-batch" class="tab-pane">
+    <div class="glass-card">
+      <div class="card-title"><i class="bi bi-cloud-upload"></i> Bulk File translation (Batch Upload)</div>
+      <p class="text-muted small">Upload an entire folder directory or select multiple document files at once to translate them simultaneously in a single background thread job. Results will compile into a zipped archive for immediate download. An email is dispatched with the download link when complete.</p>
+      
+      <div class="row g-3 mt-2">
+        <div class="col-md-6">
+          <label class="form-label font-bold small">Upload Multiple Files</label>
+          <div class="drop-zone" id="batchDropZone">
+            <i class="bi bi-files"></i>
+            <div class="drop-title" id="batchDropLabel">Select or drop documents here</div>
+            <div class="drop-sub">Select multiple .pdf, .docx, .xls, .xlsx, .txt or .csv documents (Max 200MB per file)</div>
+            <input type="file" id="batchFileInput" multiple accept=".docx,.xls,.xlsx,.txt,.csv,.pdf" style="display:none;">
+          </div>
+          
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label font-bold small">Direction</label>
+              <select class="form-select form-select-sm" id="batchDirection">
+                <option value="eng-spa">🇺🇸 English → 🇪🇸 Spanish</option>
+                <option value="spa-eng">🇪🇸 Spanish → 🇺🇸 English</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label font-bold small">Engine</label>
+              <select class="form-select form-select-sm" id="batchEngine">
+                <option value="google">Google Cloud API</option>
+                <option value="deepl">DeepL Pro API</option>
+                <option value="azure">Azure Translator</option>
+                <option value="libretranslate">LibreTranslate (Local)</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label font-bold small">Custom Words to Mask (Optional)</label>
+            <input type="text" class="form-control form-control-sm" id="batchCustomMaskWords" placeholder="e.g. projectX, roadmap (comma-separated)">
+          </div>
+          
+          <button type="button" class="btn btn-primary w-100" id="btnStartBatch" onclick="submitBatchTranslation()"><i class="bi bi-play-circle"></i> Start Batch Translation Job</button>
+        </div>
+
+        <div class="col-md-6">
+          <div class="card-title" style="font-size: 13px; color: var(--muted);"><i class="bi bi-list-task"></i> Active Processing Queue</div>
+          
+          <div id="batchProgressContainer" style="display:none; background:#f8fafc; padding:16px; border-radius:10px; border:1px solid var(--border);" class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <strong style="font-size:13px;" id="batchStatusLabel">Processing Batch Job...</strong>
+              <span class="badge bg-primary" id="batchRatioLabel">0 / 0 files</span>
+            </div>
+            <div class="progress mb-2" style="height:10px; border-radius:10px;">
+              <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" id="batchProgressBar"></div>
+            </div>
+          </div>
+
+          <div id="batchFileQueue" style="max-height: 300px; overflow-y: auto;">
+            <div class="text-muted small text-center p-4">No batch items selected or active in queue. Select files on the left to start.</div>
+          </div>
+          
+          <div id="batchDownloadArea" style="display:none;" class="mt-3">
+            <a href="#" id="batchDownloadLink" class="btn btn-success w-100 font-bold"><i class="bi bi-file-zip-fill"></i> Download Completed Zipped Results</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 4. ANALYTICS & REPORTS TAB ───────────────────────── -->
+  <div id="tab-reports" class="tab-pane">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <h5 class="mb-0 font-bold"><i class="bi bi-bar-chart-fill text-primary"></i> Usage Analytics & Corporate Reports</h5>
+        <div class="text-muted small" style="font-size: 11px;">Track engine cost allocations, department metrics, translation volume trends and audit history.</div>
+      </div>
+      <div class="d-flex gap-2">
+        <a href="/analytics/export" class="btn btn-sm btn-outline-success font-bold"><i class="bi bi-file-earmark-spreadsheet"></i> Export Report (CSV)</a>
+        <button type="button" class="btn btn-sm btn-outline-primary font-bold" onclick="window.print()"><i class="bi bi-printer"></i> Export PDF / Print</button>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-3">
+        <div class="stat-box">
+          <div class="stat-label">Total translations</div>
+          <div class="stat-value">{{ stat_total_translations }}</div>
+          <div class="stat-sub">Files & clipboard inputs logged</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-box">
+          <div class="stat-label">Total words processed</div>
+          <div class="stat-value">{{ stat_total_words | int }}</div>
+          <div class="stat-sub">Character volume counters</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-box">
+          <div class="stat-label">Files translated</div>
+          <div class="stat-value">{{ stat_total_translations }}</div>
+          <div class="stat-sub">Uploaded documents processed</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-box">
+          <div class="stat-label">Average Confidence</div>
+          <div class="stat-value text-success">{{ stat_avg_confidence }}%</div>
+          <div class="stat-sub">Translation accuracy benchmark</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-4">
+        <div class="stat-box">
+          <div class="stat-label">Most active department</div>
+          <div class="stat-value text-primary" style="font-size: 22px;">{{ stat_active_dept }}</div>
+          <div class="stat-sub">Highest translation volume</div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="stat-box">
+          <div class="stat-label">Common direction</div>
+          <div class="stat-value text-info" style="font-size: 22px;">{{ stat_common_dir }}</div>
+          <div class="stat-sub">Most frequent language pair</div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="stat-box">
+          <div class="stat-label">Avg file size</div>
+          <div class="stat-value" style="font-size: 22px;">{{ stat_avg_file_size }} KB</div>
+          <div class="stat-sub">Average parsed document size</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="glass-card">
+          <div class="card-title"><i class="bi bi-graph-up-arrow"></i> Daily Translation Volumes</div>
+          <canvas id="volChart" style="max-height: 250px;"></canvas>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="glass-card">
+          <div class="card-title"><i class="bi bi-pie-chart"></i> Department Cost Allocations</div>
+          <canvas id="deptChart" style="max-height: 250px;"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 5. SYSTEM AUDIT LOGS TAB ─────────────────────────── -->
+  <div id="tab-audit" class="tab-pane">
+    <div class="glass-card">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="card-title mb-0"><i class="bi bi-shield-lock-fill"></i> Enterprise Compliance Audit Trails</div>
+        
+        <div class="d-flex gap-2">
+          <a href="/audit/export" class="btn btn-sm btn-outline-success font-bold" id="btnExportCSV"><i class="bi bi-file-earmark-spreadsheet"></i> Export Full Audit (CSV)</a>
+        </div>
+      </div>
+      <p class="text-muted small">Admins and compliance managers can view, search, and audit transaction items, PII masking, glossary additions, exports, and login sessions.</p>
+      
+      <!-- Filter panel -->
+      <div class="row g-2 mb-3 bg-light p-3 border rounded-3">
+        <div class="col-md-4">
+          <input type="text" id="auditSearchInput" class="form-control form-control-sm" placeholder="Search by username, action, details...">
+        </div>
+        <div class="col-md-3">
+          <select id="auditActionFilter" class="form-select form-select-sm">
+            <option value="">All Actions</option>
+            <option value="login">login</option>
+            <option value="logout">logout</option>
+            <option value="text_translation">text_translation</option>
+            <option value="file_translation">file_translation</option>
+            <option value="bulk_translate">bulk_translate</option>
+            <option value="add_glossary_rule">add_glossary_rule</option>
+            <option value="delete_glossary_rule">delete_glossary_rule</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <input type="text" id="auditUserFilter" class="form-control form-control-sm" placeholder="Username filter">
+        </div>
+        <div class="col-md-2">
+          <button type="button" class="btn btn-sm btn-primary w-100 font-bold" onclick="refreshAuditLogs()"><i class="bi bi-funnel"></i> Apply Filter</button>
+        </div>
+      </div>
+
+      <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+        <table class="table table-striped table-hover align-middle small mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>Timestamp</th>
+              <th>Username</th>
+              <th>Action</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody id="auditLogsBody">
+            <!-- Populated via AJAX -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 6. MANAGE USERS TAB (ADMIN ONLY) ────────────────── -->
+  <div id="tab-users" class="tab-pane">
+    <div class="row g-3">
+      
+      <!-- Add User Card -->
+      <div class="col-md-4">
+        <div class="glass-card">
+          <div class="card-title"><i class="bi bi-person-plus"></i> Register Employee Profile</div>
+          
+          <form method="POST" action="/manage-users/add">
+            <div class="mb-3">
+              <label class="form-label small font-bold">Username</label>
+              <input type="text" name="new_username" class="form-control" placeholder="john.doe" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label small font-bold">Email address</label>
+              <input type="email" name="new_email" class="form-control" placeholder="john.doe@company.com" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label small font-bold">Department</label>
+              <select name="new_dept" class="form-select">
+                <option value="Engineering">Engineering</option>
+                <option value="Sales">Sales</option>
+                <option value="HR">HR / Compliance</option>
+                <option value="Legal">Legal</option>
+                <option value="Operations">Operations</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label small font-bold">Role Profile</label>
+              <select name="new_role" class="form-select">
+                <option value="staff">Regular Staff (Translate only)</option>
+                <option value="manager">Department Manager (Team logs)</option>
+                <option value="admin">System Admin (Full rights)</option>
+              </select>
+            </div>
+            <button type="submit" class="btn btn-primary w-100 font-bold"><i class="bi bi-save"></i> Save Employee Record</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- User List Card -->
+      <div class="col-md-8">
+        <div class="glass-card">
+          <div class="card-title"><i class="bi bi-shield-check"></i> Registered System User Records</div>
+          
+          <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle small mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Username</th>
+                  <th>Email</th>
+                  <th>Department</th>
+                  <th>System Role</th>
+                  <th class="text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% if users %}
+                  {% for u in users %}
+                  <tr>
+                    <td><strong>{{ u.username }}</strong></td>
+                    <td>{{ u.email }}</td>
+                    <td><span class="badge bg-light text-dark">{{ u.department }}</span></td>
+                    <td>
+                      <span class="role-badge {% if u.role == 'admin' %}badge-admin{% elif u.role == 'manager' %}badge-manager{% else %}badge-staff{% endif %}">
+                        {{ u.role }}
+                      </span>
+                    </td>
+                    <td class="text-center">
+                      {% if u.username != username %}
+                      <form method="POST" action="/manage-users/delete/{{ u.id }}" style="display:inline;">
+                        <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove user profile?')"><i class="bi bi-trash"></i></button>
+                      </form>
+                      {% else %}
+                      <span class="text-muted small">Current User</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                {% else %}
+                  <tr><td colspan="5" class="text-center text-muted p-4">No users found. Add one on the left.</td></tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 7. SYSTEM SETTINGS TAB ───────────────────────────── -->
+  <div id="tab-settings" class="tab-pane">
+    <div class="glass-card" style="max-width: 600px;">
+      <div class="card-title"><i class="bi bi-gear-wide-connected"></i> Global Pluggable configurations</div>
+      <p class="text-muted small">System configuration panel for global translation engines selectors, compliance warning salary metrics, and API keys settings.</p>
+      
+      <hr>
+
+      <form method="POST" action="/settings/update">
+        <div class="mb-3">
+          <label class="form-label small font-bold">Default System Translation Engine</label>
+          <select name="global_engine" class="form-select">
+            <option value="google" {% if current_engine == 'google' %}selected{% endif %}>Google Cloud API</option>
+            <option value="deepl" {% if current_engine == 'deepl' %}selected{% endif %}>DeepL Pro API (Simulated)</option>
+            <option value="azure" {% if current_engine == 'azure' %}selected{% endif %}>Microsoft Azure API (Simulated)</option>
+            <option value="libretranslate" {% if current_engine == 'libretranslate' %}selected{% endif %}>LibreTranslate (Offline / Local)</option>
+          </select>
+          <div class="form-text small" style="font-size:10px;">Selects default engine when new users translate files or raw text.</div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label small font-bold">Compliance Manager Salary Threshold Alert</label>
+          <div class="input-group">
+            <span class="input-group-text">$</span>
+            <input type="number" name="sensitivity_salary" class="form-control" value="100000" placeholder="100000">
+          </div>
+          <div class="form-text small" style="font-size:10px;">Emails a high sensitivity compliance warning alert to department Managers when salary items above this amount are processed.</div>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label small font-bold">Corporate API Billing Rates</label>
+          <table class="table table-bordered table-sm small mb-0">
+            <thead class="table-light"><tr><th>Engine</th><th>Cost per M Chars</th></tr></thead>
+            <tbody>
+              <tr><td>Google Translate API</td><td>$20.00 / Million characters</td></tr>
+              <tr><td>DeepL Pro API</td><td>$20.00 / Million characters</td></tr>
+              <tr><td>Microsoft Azure API</td><td>$10.00 / Million characters</td></tr>
+              <tr><td>LibreTranslate (Local)</td><td>$0.00 (Offline, Free)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100 font-bold"><i class="bi bi-save"></i> Save System Configurations</button>
+      </form>
+    </div>
+
+    <!-- API Connection Diagnostics Card -->
+    <div class="glass-card mt-4" style="max-width: 600px;">
+      <div class="card-title"><i class="bi bi-activity"></i> API Connection Diagnostics</div>
+      <p class="text-muted small">Verify active network connectivity and API keys validation status for each configured translator engine.</p>
+      
+      <div class="d-flex gap-2 mb-3">
+        <button type="button" class="btn btn-sm btn-outline-primary font-bold" id="btnTestConnections" onclick="testAPIConnections()"><i class="bi bi-play-fill"></i> Run Connection Diagnostics</button>
+      </div>
+      
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm small mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Translation Engine</th>
+              <th>Status</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody id="apiConnectionStatusBody">
+            <tr>
+              <td>Google Cloud API</td>
+              <td><span class="badge bg-secondary">Not Tested</span></td>
+              <td class="text-muted small">-</td>
+            </tr>
+            <tr>
+              <td>DeepL Pro API</td>
+              <td><span class="badge bg-secondary">Not Tested</span></td>
+              <td class="text-muted small">-</td>
+            </tr>
+            <tr>
+              <td>Microsoft Azure API</td>
+              <td><span class="badge bg-secondary">Not Tested</span></td>
+              <td class="text-muted small">-</td>
+            </tr>
+            <tr>
+              <td>LibreTranslate (Local)</td>
+              <td><span class="badge bg-secondary">Not Tested</span></td>
+              <td class="text-muted small">-</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+          </div>
+        </div>
+
+
+
+      </div>
+    </div>
+  </div>
+
+</main>
+
+
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+  // Notification System
+  let notifications = [];
+  
+  function addNotification(message, type = 'info') {
+    const id = Date.now();
+    notifications.unshift({ id, message, type, timestamp: new Date() });
+    if (notifications.length > 20) notifications.pop(); // Keep last 20
+    updateNotificationUI();
+    
+    // Auto-hide success notifications after 5 seconds
+    if (type === 'success') {
+      setTimeout(() => removeNotification(id), 5000);
+    }
+  }
+  
+  function removeNotification(id) {
+    notifications = notifications.filter(n => n.id !== id);
+    updateNotificationUI();
+  }
+  
+  function clearAllNotifications() {
+    notifications = [];
+    updateNotificationUI();
+  }
+  
+  function updateNotificationUI() {
+    const badge = document.getElementById('notificationBadge');
+    const list = document.getElementById('notificationList');
+    
+    if (notifications.length === 0) {
+      badge.style.display = 'none';
+      list.innerHTML = '<div class="text-muted small text-center p-3">No notifications yet</div>';
+      return;
+    }
+    
+    badge.textContent = Math.min(notifications.length, 9) + (notifications.length > 9 ? '+' : '');
+    badge.style.display = 'block';
+    
+    list.innerHTML = notifications.map(n => {
+      const icon = n.type === 'success' ? '✓' : n.type === 'error' ? '✗' : 'ℹ';
+      const color = n.type === 'success' ? '#10b981' : n.type === 'error' ? '#ef4444' : '#dc2626';
+      const bgColor = n.type === 'success' ? '#ecfdf5' : n.type === 'error' ? '#fef2f2' : '#fef2f2';
+      const time = n.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      
+      return `
+        <div style="background:${bgColor}; border-left:3px solid ${color}; padding:10px 12px; margin-bottom:8px; border-radius:6px; display:flex; justify-content:space-between; align-items:flex-start;">
+          <div>
+            <div style="font-size:12px; font-weight:600; color:${color};">${icon} ${n.message}</div>
+            <div style="font-size:10px; color:#94a3b8; margin-top:2px;">${time}</div>
+          </div>
+          <button onclick="removeNotification(${n.id})" style="background:none; border:none; cursor:pointer; color:#94a3b8; padding:0; font-size:14px;">×</button>
+        </div>
+      `;
+    }).join('');
+  }
+  
+  function toggleNotificationPanel() {
+    const panel = document.getElementById('notificationPanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  }
+  
+  // Close notification panel when clicking outside
+  document.addEventListener('click', (e) => {
+    const container = document.getElementById('notificationContainer');
+    const panel = document.getElementById('notificationPanel');
+    if (!container.contains(e.target) && panel.style.display !== 'none') {
+      panel.style.display = 'none';
+    }
+  });
+
+  // Action Menu Handler
+  function toggleActionMenu(element) {
+    const menu = element.nextElementSibling;
+    if (menu) {
+      menu.classList.toggle('show');
+    }
+  }
+
+  // Close all action menus when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.action-menu-container')) {
+      document.querySelectorAll('.action-menu-dropdown').forEach(menu => {
+        menu.classList.remove('show');
+      });
+    }
+  });
+
+  // Translator Tab Switching (Text vs Document)
+  function switchTranslatorTab(tab) {
+    // Hide all tabs
+    document.querySelectorAll('.translator-tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.translator-tab-btn').forEach(el => {
+      el.classList.remove('active');
+      el.style.borderBottomColor = 'transparent';
+      el.style.color = 'var(--muted)';
+    });
+    
+    // Show selected tab
+    const selectedTab = document.getElementById(`translator-tab-${tab}`);
+    if (selectedTab) {
+      selectedTab.style.display = 'block';
+      const btn = event.target.closest('.translator-tab-btn');
+      if (btn) {
+        btn.classList.add('active');
+        btn.style.borderBottomColor = 'var(--primary)';
+        btn.style.color = 'var(--primary)';
+      }
+    }
+  }
+
+  // Current Date display
+  document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'short', day: 'numeric'
+  });
+
+  // SPA Tab Switching
+  function switchTab(tabId) {
+    document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.menu-link').forEach(el => el.classList.remove('active'));
+    
+    const targetPane = document.getElementById(`tab-${tabId}`);
+    if (targetPane) targetPane.classList.add('active');
+    
+    // Find clicked button
+    const btn = Array.from(document.querySelectorAll('.menu-link')).find(el => el.getAttribute('onclick') === `switchTab('${tabId}')`);
+    if (btn) btn.classList.add('active');
+    
+    if (tabId === 'audit') {
+      refreshAuditLogs();
+    }
+  }
+
+  // Preserve Active Tab across refresh via URL Hash
+  window.onload = function() {
+    const hash = window.location.hash;
+    if (hash) {
+      const tabId = hash.replace('Tab', '').replace('#', '');
+      switchTab(tabId);
+    }
+  };
+
+  // Sample PII Text Injection helper
+  function insertSampleText() {
+    const sample = "EMPLOYEE CONFIDENTIAL STATEMENT\n" +
+      "Subject: Salary review and payroll records for compliance audit.\n\n" +
+      "Dr. Mark Miller has a current salary of $142,000 per annum inside our WebLogic Operations sector. " +
+      "His email is mark.miller@company.com and his primary contact phone is 2125550198.\n\n" +
+      "Meanwhile, Director General Alice Johnson (alice.johnson@company.com) reviews corporate files " +
+      "for employees with ID numbers like 332-90-4491. Her wage sits at $185,000 USD/yr. " +
+      "Please run this under Google API translation pipelines immediately.";
+    document.querySelector('textarea[name="raw_text"]').value = sample;
+  }
+
+  // Toggle formatted view and Interactive split review
+  function toggleOutputView(view) {
+    document.getElementById('viewBtnText').classList.remove('active');
+    document.getElementById('viewBtnInteractive').classList.remove('active');
+    
+    document.getElementById('outputContainerText').style.display = 'none';
+    document.getElementById('outputContainerInteractive').style.display = 'none';
+    
+    if (view === 'text') {
+      document.getElementById('viewBtnText').classList.add('active');
+      document.getElementById('outputContainerText').style.display = 'block';
+    } else {
+      document.getElementById('viewBtnInteractive').classList.add('active');
+      document.getElementById('outputContainerInteractive').style.display = 'block';
+    }
+  }
+
+  // Copy Output text
+  function copyTranslation() {
+    const box = document.getElementById('rawOutputBox');
+    box.select();
+    document.execCommand('copy');
+    alert('Translation copied to clipboard!');
+  }
+
+
+
+  // Refresh and load audits via JSON API
+  function refreshAuditLogs() {
+    const search = document.getElementById('auditSearchInput').value;
+    const action = document.getElementById('auditActionFilter').value;
+    const user = document.getElementById('auditUserFilter').value;
+    
+    // Set parameters on export URL as well
+    document.getElementById('btnExportCSV').href = `/audit/export?search=${search}&action=${action}&user=${user}`;
+    
+    fetch(`/audit/logs?search=${search}&action=${action}&user=${user}`)
+      .then(res => res.json())
+      .then(data => {
+        const body = document.getElementById('auditLogsBody');
+        body.innerHTML = '';
+        if (data.length === 0) {
+          body.innerHTML = '<tr><td colspan="4" class="text-center text-muted p-3">No compliance records found matching selection.</td></tr>';
+          return;
+        }
+        data.forEach(log => {
+          body.innerHTML += `
+            <tr>
+              <td><span class="text-muted font-monospace small">${log.timestamp}</span></td>
+              <td><strong>${log.username}</strong></td>
+              <td><span class="badge bg-primary-soft text-primary font-monospace" style="font-size:10px;">${log.action}</span></td>
+              <td><span class="text-dark">${log.details}</span></td>
+            </tr>
+          `;
+        });
+      });
+  }
+
+  // Main Upload drag and drop handlers
+  const fileInput = document.getElementById('mainFileInput');
+  const dropZone = document.getElementById('mainDropZone');
+  const dropLabel = document.getElementById('dropLabel');
+  
+  dropZone.onclick = () => fileInput.click();
+  
+  fileInput.onchange = () => {
+    if (fileInput.files.length) {
+      dropLabel.innerHTML = `📄 <span class="text-primary font-bold">${fileInput.files[0].name}</span> selected`;
+    }
+  };
+
+  dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); };
+  dropZone.ondragleave = () => dropZone.classList.remove('drag-over');
+  dropZone.ondrop = (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    if (e.dataTransfer.files.length) {
+      fileInput.files = e.dataTransfer.files;
+      dropLabel.innerHTML = `📄 <span class="text-primary font-bold">${fileInput.files[0].name}</span> dropped`;
+    }
+  };
+
+  // --- ASYNC BATCH TRANSLATION SCRIPTS ---
+  const batchFileInput = document.getElementById('batchFileInput');
+  const batchDropZone = document.getElementById('batchDropZone');
+  const batchDropLabel = document.getElementById('batchDropLabel');
+  
+  batchDropZone.onclick = () => batchFileInput.click();
+  
+  batchFileInput.onchange = () => {
+    updateBatchQueueUI();
+  };
+  
+  batchDropZone.ondragover = (e) => { e.preventDefault(); batchDropZone.classList.add('drag-over'); };
+  batchDropZone.ondragleave = () => batchDropZone.classList.remove('drag-over');
+  batchDropZone.ondrop = (e) => {
+    e.preventDefault();
+    batchDropZone.classList.remove('drag-over');
+    if (e.dataTransfer.files.length) {
+      batchFileInput.files = e.dataTransfer.files;
+      updateBatchQueueUI();
+    }
+  };
+
+  function updateBatchQueueUI() {
+    const queue = document.getElementById('batchFileQueue');
+    queue.innerHTML = '';
+    const files = batchFileInput.files;
+    
+    if (files.length === 0) {
+      queue.innerHTML = '<div class="text-muted small text-center p-4">No batch items selected.</div>';
+      return;
+    }
+    
+    batchDropLabel.innerHTML = `📂 <span class="text-primary font-bold">${files.length} documents</span> selected`;
+    
+    Array.from(files).forEach((file, idx) => {
+      queue.innerHTML += `
+        <div class="batch-file-row">
+          <div class="batch-file-info">
+            <i class="bi bi-file-earmark-text batch-file-icon"></i>
+            <div>
+              <div class="batch-file-name">${file.name}</div>
+              <div class="text-muted" style="font-size:10px;">${(file.size / 1024).toFixed(1)} KB</div>
+            </div>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <div class="batch-progress">
+              <div class="batch-progress-bar" id="fileProgress_${idx}"></div>
+            </div>
+            <span class="batch-file-status" id="fileStatus_${idx}">Ready</span>
+          </div>
+        </div>
+      `;
+    });
+  }
+
+  function submitBatchTranslation() {
+    const files = batchFileInput.files;
+    if (files.length === 0) {
+      alert('Please upload one or more files first.');
+      return;
+    }
+    
+    const direction = document.getElementById('batchDirection').value;
+    const engine = document.getElementById('batchEngine').value;
+    const customMaskWords = document.getElementById('batchCustomMaskWords').value;
+    
+    const formData = new FormData();
+    formData.append('direction', direction);
+    formData.append('engine', engine);
+    formData.append('custom_mask_words', customMaskWords);
+    
+    Array.from(files).forEach(file => {
+      formData.append('documents', file);
+    });
+    
+    // UI Updates
+    document.getElementById('btnStartBatch').disabled = true;
+    document.getElementById('batchProgressContainer').style.display = 'block';
+    
+    // Add notification
+    addNotification(`Batch Translation Started - ${files.length} files entered queue.`, 'info');
+    
+    fetch('/translate-batch', {
+      method: 'POST',
+      body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.error) {
+        alert(data.error);
+        addNotification(`Batch Translation Failed: ${data.error}`, 'error');
+        document.getElementById('btnStartBatch').disabled = false;
+        return;
+      }
+      
+      const jobId = data.job_id;
+      // Start status checking interval
+      checkBatchProgress(jobId, files.length);
+    });
+  }
+
+  function checkBatchProgress(jobId, fileCount) {
+    const interval = setInterval(() => {
+      fetch(`/batch-status/${jobId}`)
+      .then(res => res.json())
+      .then(statusData => {
+        const processed = statusData.processed_files;
+        const total = statusData.total_files;
+        const status = statusData.status;
+        
+        // Update batch status row bars
+        for (let i = 0; i < total; i++) {
+          const bar = document.getElementById(`fileProgress_${i}`);
+          const lbl = document.getElementById(`fileStatus_${i}`);
+          if (i < processed) {
+            bar.style.width = '100%';
+            lbl.textContent = 'Completed ✅';
+            lbl.classList.remove('text-muted');
+            lbl.classList.add('text-success');
+          } else if (i === processed && status !== 'Completed') {
+            bar.style.width = '50%';
+            lbl.textContent = 'Translating ⚙️';
+            lbl.classList.add('text-primary');
+          }
+        }
+
+        const pct = Math.round((processed / total) * 100);
+        document.getElementById('batchProgressBar').style.width = `${pct}%`;
+        document.getElementById('batchRatioLabel').textContent = `${processed} / ${total} files`;
+        
+        if (status === 'Completed' || processed >= total) {
+          clearInterval(interval);
+          document.getElementById('batchProgressBar').style.width = '100%';
+          document.getElementById('batchProgressBar').classList.remove('progress-bar-animated');
+          document.getElementById('batchStatusLabel').textContent = 'Zipping and Compiling completed! 🎉';
+          document.getElementById('btnStartBatch').disabled = false;
+          
+          // Add completion notification
+          addNotification(`Translation Completed - ${total} documents translated successfully.`, 'success');
+          
+          // Display Download Link
+          document.getElementById('batchDownloadArea').style.display = 'block';
+          document.getElementById('batchDownloadLink').href = `/download-batch/${jobId}`;
+          
+          // Reload mailbox list dynamically
+
+          setTimeout(() => location.reload(), 2000);
+        }
+      });
+    }, 1500);
+  }
+
+  // --- API Connection Diagnostics AJAX Handler ---
+  function testAPIConnections() {
+    const btn = document.getElementById('btnTestConnections');
+    const body = document.getElementById('apiConnectionStatusBody');
+    
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Diagnosing...';
+    
+    const engines = [
+      { id: 'google', name: 'Google Cloud API' },
+      { id: 'deepl', name: 'DeepL Pro API' },
+      { id: 'azure', name: 'Microsoft Azure API' },
+      { id: 'libretranslate', name: 'LibreTranslate (Local)' }
+    ];
+    
+    body.innerHTML = engines.map(eng => `
+      <tr>
+        <td>${eng.name}</td>
+        <td><span class="badge bg-info text-white"><i class="bi bi-hourglass-split"></i> Testing...</span></td>
+        <td class="text-muted small">-</td>
+      </tr>
+    `).join('');
+    
+    fetch('/settings/check-connections')
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play-fill"></i> Run Connection Diagnostics';
+        
+        body.innerHTML = '';
+        engines.forEach(eng => {
+          const info = data[eng.id] || { status: 'Not Configured', error: null };
+          let badge = '';
+          let details = info.error ? info.error : '-';
+          
+          if (info.status === 'Active') {
+            badge = '<span class="badge bg-success"><i class="bi bi-check-circle-fill"></i> Active</span>';
+          } else if (info.status === 'Not Configured') {
+            badge = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill"></i> Not Configured</span>';
+          } else {
+            badge = '<span class="badge bg-danger"><i class="bi bi-x-circle-fill"></i> Connection Failed</span>';
+          }
+          
+          body.innerHTML += `
+            <tr>
+              <td>${eng.name}</td>
+              <td>${badge}</td>
+              <td class="text-danger small font-monospace">${details}</td>
+            </tr>
+          `;
+        });
+      })
+      .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play-fill"></i> Run Connection Diagnostics';
+        alert(`Diagnostics failed: ${err.message}`);
+        
+        body.innerHTML = engines.map(eng => `
+          <tr>
+            <td>${eng.name}</td>
+            <td><span class="badge bg-danger"><i class="bi bi-x-circle-fill"></i> Diagnostics Error</span></td>
+            <td class="text-danger small font-monospace">${err.message}</td>
+          </tr>
+        `).join('');
+      });
+  }
+
+  // --- Dynamic charts setup via Chart.js ---
+  document.addEventListener('DOMContentLoaded', () => {
+    // A. Daily Translation charts
+    const volCtx = document.getElementById('volChart');
+    if (volCtx) {
+      new Chart(volCtx, {
+        type: 'line',
+        data: {
+          labels: [
+            {% for row in daily_stats | reverse %}
+              "{{ row.day }}",
+            {% endfor %}
+          ],
+          datasets: [{
+            label: 'Words Translated',
+            data: [
+              {% for row in daily_stats | reverse %}
+                {{ row.words }},
+              {% endfor %}
+            ],
+            borderColor: '#dc2626',
+            backgroundColor: 'rgba(220,38,38,0.08)',
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+    }
+
+    // B. Department Cost Chart
+    const deptCtx = document.getElementById('deptChart');
+    if (deptCtx) {
+      new Chart(deptCtx, {
+        type: 'doughnut',
+        data: {
+          labels: [
+            {% for row in department_stats %}
+              "{{ row.department }}",
+            {% endfor %}
+          ],
+          datasets: [{
+            data: [
+              {% for row in department_stats %}
+                {{ row.words }},
+              {% endfor %}
+            ],
+            backgroundColor: ['#dc2626', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+          }]
+        },
+        options: { responsive: true }
+      });
+    }
+
+    // Check if single text translation output had paragraph score data
+    const pData = [
+      {% if paragraphs %}
+        {% for p in paragraphs %}
+        {
+          source: `{{ p.source | safe }}`,
+          target: `{{ p.target | safe }}`,
+          score: {{ p.score }},
+          low: {% if p.low_confidence %}true{% else %}false{% endif %},
+          flags: [
+            {% for flg in p.flags %}
+            "{{ flg }}",
+            {% endfor %}
+          ]
+        },
+        {% endfor %}
+      {% endif %}
+    ];
+
+    // Populate interactive reviewers
+    if (pData.length > 0) {
+      const panel = document.getElementById('interactivePanel');
+      panel.innerHTML = '';
+      
+      pData.forEach(p => {
+        if (!p.source.trim()) return;
+        const lowClass = p.low ? 'low-confidence' : '';
+        const badgeClass = p.low ? 'score-low' : 'score-high';
+        
+        let flagList = p.flags.map(f => `<li>&bull; ${f}</li>`).join('');
+        let flagContainer = p.flags.length > 0 ? `<div style="font-size:10px; color:#a16207; margin-top:6px;"><ul>${flagList}</ul></div>` : '';
+        
+        panel.innerHTML += `
+          <div class="p-review-card ${lowClass}">
+            <div class="p-source">${p.source}</div>
+            <div class="p-target">${p.target}</div>
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="p-score-badge ${badgeClass}">Accuracy: ${p.score}%</span>
+              ${flagContainer}
+            </div>
+          </div>
+        `;
+      });
+      
+    }
+
+    {% if total_words > 0 or translated %}
+      // Update form highlights metadata
+      const wEl = document.getElementById('metaWords');
+      const mEl = document.getElementById('metaMasked');
+      if (wEl) wEl.textContent = "{{ total_words }}";
+      if (mEl) mEl.textContent = "{{ masked_words }}";
+      
+      // Put text into raw output
+      const rawOut = document.getElementById('rawOutputBox');
+      if (rawOut) rawOut.value = `{{ translated | safe }}`;
+    {% endif %}
+
+    // Configure single file download button if a document was translated
+    {% if filename_used and filename_used != "Text Input" and filename_used != "Text Box Input" %}
+      const downloadBtn = document.getElementById('btnDownloadDocument');
+      if (downloadBtn) {
+        downloadBtn.style.display = 'inline-block';
+        downloadBtn.onclick = () => {
+          window.location.href = `/download-file/${encodeURIComponent("{{ filename_used }}")}`;
+        };
+      }
+    {% endif %}
+  });
+</script>
+
+</body>
+</html>

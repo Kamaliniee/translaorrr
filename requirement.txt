@@ -1,0 +1,8 @@
+flask
+python-dotenv
+deep-translator
+python-docx
+openpyxl
+requests
+PyPDF2
+pymysql

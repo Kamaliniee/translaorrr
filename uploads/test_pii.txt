@@ -1,0 +1,4 @@
+Employee John Doe has a current salary of $120,000 per annum.
+His primary contact email is john.doe@company.com and his phone is 555-123-4567.
+Mr. Miller reviews corporate compliance files for employees with ID numbers like 123-45-6789.
+Please run this audit under our pipelines immediately.
