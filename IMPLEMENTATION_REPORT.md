@@ -273,6 +273,9 @@ This report documents the complete implementation of the DocTranslate Enterprise
    - **TXT:** Line-break preservation
 
 5. **Formatting Preservation**
+   - Verify document formatting remains unchanged after translation
+   - Headings, tables, fonts, colors, and formatting remain the same
+   - Only the inner data should be translated
    - Table structures maintained
    - Heading levels preserved
    - Bullet list formatting retained
@@ -663,6 +666,9 @@ LIBRETRANSLATE_API_URL=http://localhost:5000/
    - Support for image files
 
 2. **Format Preservation**
+   - Verify document formatting remains unchanged after translation
+   - Headings, tables, fonts, colors, and formatting remain the same
+   - Only the inner data should be translated
    - Better PDF formatting preservation
    - Table structure maintenance
    - Image captions translation

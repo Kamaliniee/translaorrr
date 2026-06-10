@@ -6,3 +6,4 @@ openpyxl
 requests
 PyPDF2
 pymysql
+truststore

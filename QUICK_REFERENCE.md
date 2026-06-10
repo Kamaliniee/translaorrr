@@ -81,6 +81,7 @@ All 10 requirements successfully implemented. No breaking changes. Production re
   - Download button
   - Document status display
   - Format preservation
+  - Format preservation check: verify headings, tables, fonts, colors, and formatting remain unchanged while only inner data is translated
 
 ### 3. ✅ Engine Selection in Both Tabs
 - Dropdown menu shows all 4 engines:

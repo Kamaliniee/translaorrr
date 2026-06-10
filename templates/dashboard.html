@@ -516,10 +516,7 @@
           <div class="col-md-4">
             <label class="form-label font-bold small text-muted">Translation Engine</label>
             <select name="engine" class="form-select">
-              <option value="google" {% if current_engine == 'google' %}selected{% endif %}>Google Cloud API</option>
-              <option value="deepl" {% if current_engine == 'deepl' %}selected{% endif %}>DeepL Pro API</option>
-              <option value="azure" {% if current_engine == 'azure' %}selected{% endif %}>Microsoft Azure API</option>
-              <option value="libretranslate" {% if current_engine == 'libretranslate' %}selected{% endif %}>LibreTranslate (Local)</option>
+              <option value="google" selected>Google Cloud API</option>
             </select>
           </div>
           <div class="col-md-4">
@@ -650,9 +647,6 @@
               <label class="form-label font-bold small">Engine</label>
               <select class="form-select form-select-sm" id="batchEngine">
                 <option value="google">Google Cloud API</option>
-                <option value="deepl">DeepL Pro API</option>
-                <option value="azure">Azure Translator</option>
-                <option value="libretranslate">LibreTranslate (Local)</option>
               </select>
             </div>
           </div>
@@ -933,10 +927,7 @@
         <div class="mb-3">
           <label class="form-label small font-bold">Default System Translation Engine</label>
           <select name="global_engine" class="form-select">
-            <option value="google" {% if current_engine == 'google' %}selected{% endif %}>Google Cloud API</option>
-            <option value="deepl" {% if current_engine == 'deepl' %}selected{% endif %}>DeepL Pro API (Simulated)</option>
-            <option value="azure" {% if current_engine == 'azure' %}selected{% endif %}>Microsoft Azure API (Simulated)</option>
-            <option value="libretranslate" {% if current_engine == 'libretranslate' %}selected{% endif %}>LibreTranslate (Offline / Local)</option>
+            <option value="google" selected>Google Cloud API</option>
           </select>
           <div class="form-text small" style="font-size:10px;">Selects default engine when new users translate files or raw text.</div>
         </div>
@@ -956,9 +947,6 @@
             <thead class="table-light"><tr><th>Engine</th><th>Cost per M Chars</th></tr></thead>
             <tbody>
               <tr><td>Google Translate API</td><td>$20.00 / Million characters</td></tr>
-              <tr><td>DeepL Pro API</td><td>$20.00 / Million characters</td></tr>
-              <tr><td>Microsoft Azure API</td><td>$10.00 / Million characters</td></tr>
-              <tr><td>LibreTranslate (Local)</td><td>$0.00 (Offline, Free)</td></tr>
             </tbody>
           </table>
         </div>
@@ -988,21 +976,6 @@
           <tbody id="apiConnectionStatusBody">
             <tr>
               <td>Google Cloud API</td>
-              <td><span class="badge bg-secondary">Not Tested</span></td>
-              <td class="text-muted small">-</td>
-            </tr>
-            <tr>
-              <td>DeepL Pro API</td>
-              <td><span class="badge bg-secondary">Not Tested</span></td>
-              <td class="text-muted small">-</td>
-            </tr>
-            <tr>
-              <td>Microsoft Azure API</td>
-              <td><span class="badge bg-secondary">Not Tested</span></td>
-              <td class="text-muted small">-</td>
-            </tr>
-            <tr>
-              <td>LibreTranslate (Local)</td>
               <td><span class="badge bg-secondary">Not Tested</span></td>
               <td class="text-muted small">-</td>
             </tr>
@@ -1425,10 +1398,7 @@
     btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Diagnosing...';
     
     const engines = [
-      { id: 'google', name: 'Google Cloud API' },
-      { id: 'deepl', name: 'DeepL Pro API' },
-      { id: 'azure', name: 'Microsoft Azure API' },
-      { id: 'libretranslate', name: 'LibreTranslate (Local)' }
+      { id: 'google', name: 'Google Cloud API' }
     ];
     
     body.innerHTML = engines.map(eng => `

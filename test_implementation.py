@@ -66,28 +66,17 @@ class DocTranslateImplementationTests(unittest.TestCase):
     
     # ── 4. Translation Engine Tests ──
     def test_engine_list_complete(self):
-        """Test that all translation engines are implemented"""
-        from services.translatorr import (
-            real_google_translate,
-            real_deepl_translate,
-            real_azure_translate,
-            real_libre_translate
-        )
-        print("✓ All translation engines are implemented:")
-        print("  - Google Cloud Translation")
-        print("  - DeepL Pro API")
-        print("  - Microsoft Azure Translator")
-        print("  - LibreTranslate (Local)")
+        """Test that the Google translation engine is implemented"""
+        from services.translatorr import real_google_translate
+        self.assertTrue(callable(real_google_translate))
+        print("✓ Google translation engine is implemented")
     
     def test_engine_display_names(self):
         """Test engine display names are correct"""
         from services.translatorr import get_engine_display_name
         
         expected = {
-            'google': 'Google Cloud Translation',
-            'deepl': 'DeepL Pro',
-            'azure': 'Azure Translator',
-            'libretranslate': 'LibreTranslate (Local)'
+            'google': 'Google Cloud Translation'
         }
         
         for engine, display_name in expected.items():

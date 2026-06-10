@@ -209,6 +209,7 @@
 - [x] DOCX extraction
 - [x] XLSX extraction
 - [x] PII masking/restoration
+- [x] Format preservation check for headings, tables, fonts, and colors
 
 ### 8. Bulk Translation Notifications ✅
 - [x] Notification bell icon

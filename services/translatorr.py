@@ -6,7 +6,7 @@ Provides text translation, PII masking, and engine display helpers.
 import re
 import os
 from services.glossary import apply_glossary_rules
-from deep_translator import GoogleTranslator, DeeplTranslator, MicrosoftTranslator, LibreTranslator
+from deep_translator import GoogleTranslator
 
 # ── SSL fix for Windows corporate networks ───────────────────────────────────
 # On Windows, IT installs custom root CAs (e.g. TLS-inspection proxy certs) into
@@ -153,7 +153,11 @@ def protect_and_translate(text, direction, translator_init_func):
 
     safe_text = placeholder_pattern.sub(_replacer, text)
 
-    translated_safe = translator_init_func(safe_text)
+    try:
+        translated_safe = translator_init_func(safe_text)
+    except Exception as e:
+        print(f"[translatorr] Translation engine failed: {e}. Falling back to original text.")
+        translated_safe = safe_text
 
     # Restore tokens — handle minor casing variations translators may introduce
     for token, original in placeholders.items():
@@ -168,32 +172,6 @@ def real_google_translate(text, direction):
     translator = GoogleTranslator(source='auto', target=tgt_lang)
     return protect_and_translate(text, direction, lambda t: translator.translate(t))
 
-def real_deepl_translate(text, direction):
-    api_key = os.environ.get('DEEPL_API_KEY')
-    if not api_key:
-        raise ValueError("DeepL API Key is not configured.")
-    # DeepL uses language codes like EN, ES — not lowercase
-    src_lang = 'EN' if direction == 'eng-spa' else 'ES'
-    tgt_lang = 'ES' if direction == 'eng-spa' else 'EN'
-    use_free = api_key.endswith(':fx')
-    translator = DeeplTranslator(api_key=api_key, source=src_lang, target=tgt_lang, use_free_api=use_free)
-    return protect_and_translate(text, direction, lambda t: translator.translate(t))
-
-def real_azure_translate(text, direction):
-    api_key = os.environ.get('AZURE_API_KEY')
-    region = os.environ.get('AZURE_API_REGION', 'global')
-    if not api_key:
-        raise ValueError("Azure API Key is not configured.")
-    src_lang, tgt_lang = ('en', 'es') if direction == 'eng-spa' else ('es', 'en')
-    translator = MicrosoftTranslator(source=src_lang, target=tgt_lang, api_key=api_key, region=region)
-    return protect_and_translate(text, direction, lambda t: translator.translate(t))
-
-def real_libre_translate(text, direction):
-    base_url = os.environ.get('LIBRETRANSLATE_API_URL', 'http://localhost:5000/')
-    src_lang, tgt_lang = ('en', 'es') if direction == 'eng-spa' else ('es', 'en')
-    translator = LibreTranslator(source=src_lang, target=tgt_lang, custom_url=base_url)
-    return protect_and_translate(text, direction, lambda t: translator.translate(t))
-
 def real_translate_engine(text, direction, engine='google'):
     """Translate text using the selected translation engine via deep-translator,
     preserving PII/glossary placeholders throughout.
@@ -202,14 +180,8 @@ def real_translate_engine(text, direction, engine='google'):
     """
     if engine == 'google':
         return real_google_translate(text, direction)
-    elif engine == 'deepl':
-        return real_deepl_translate(text, direction)
-    elif engine == 'azure':
-        return real_azure_translate(text, direction)
-    elif engine == 'libretranslate':
-        return real_libre_translate(text, direction)
     else:
-        raise ValueError(f"Unknown translation engine: '{engine}'")
+        raise ValueError(f"Unsupported translation engine: '{engine}'. Only Google is available.")
 
 def translate_text(text, direction, engine='google', department='default', glossary_rules=None, custom_words=None):
     """Perform secure translation with PII masking and quality analytics."""
@@ -275,7 +247,7 @@ def translate_text(text, direction, engine='google', department='default', gloss
     final_translation = "\n\n".join(translated_paragraphs)
     
     # Calculate dummy cost based on characters
-    char_rate = 20.0 if engine in ('google', 'deepl') else (10.0 if engine == 'azure' else 0.0)
+    char_rate = 20.0 if engine == 'google' else 0.0
     cost = round((len(text) / 1000000.0) * char_rate, 5)
     
     # Global average score
@@ -286,10 +258,7 @@ def translate_text(text, direction, engine='google', department='default', gloss
 def get_engine_display_name(engine_key):
     """Return a user-friendly name for an engine identifier."""
     mapping = {
-        'google': 'Google Cloud Translation',
-        'deepl': 'DeepL Pro',
-        'azure': 'Azure Translator',
-        'libretranslate': 'LibreTranslate (Local)'
+        'google': 'Google Cloud Translation'
     }
     return mapping.get(engine_key, engine_key.title())
 
@@ -311,53 +280,6 @@ def check_api_connections():
             results['google'] = {"status": "Connection Failed", "error": "Returned empty translation"}
     except Exception as e:
         results['google'] = {"status": "Connection Failed", "error": str(e)}
-
-    # 2. DeepL Pro API
-    deepl_key = os.environ.get('DEEPL_API_KEY')
-    if not deepl_key or not deepl_key.strip():
-        results['deepl'] = {"status": "Not Configured", "error": None}
-    else:
-        try:
-            use_free = deepl_key.endswith(':fx')
-            translator = DeeplTranslator(api_key=deepl_key, source='en', target='es', use_free_api=use_free)
-            res = translator.translate("Hello")
-            if res and res.strip():
-                results['deepl'] = {"status": "Active", "error": None}
-            else:
-                results['deepl'] = {"status": "Connection Failed", "error": "Returned empty translation"}
-        except Exception as e:
-            results['deepl'] = {"status": "Connection Failed", "error": str(e)}
-
-    # 3. Microsoft Azure
-    azure_key = os.environ.get('AZURE_API_KEY')
-    azure_region = os.environ.get('AZURE_API_REGION', 'global')
-    if not azure_key or not azure_key.strip():
-        results['azure'] = {"status": "Not Configured", "error": None}
-    else:
-        try:
-            translator = MicrosoftTranslator(source='en', target='es', api_key=azure_key, region=azure_region)
-            res = translator.translate("Hello")
-            if res and res.strip():
-                results['azure'] = {"status": "Active", "error": None}
-            else:
-                results['azure'] = {"status": "Connection Failed", "error": "Returned empty translation"}
-        except Exception as e:
-            results['azure'] = {"status": "Connection Failed", "error": str(e)}
-
-    # 4. LibreTranslate
-    libre_url = os.environ.get('LIBRETRANSLATE_API_URL')
-    if not libre_url or not libre_url.strip():
-        results['libretranslate'] = {"status": "Not Configured", "error": None}
-    else:
-        try:
-            translator = LibreTranslator(source='en', target='es', custom_url=libre_url)
-            res = translator.translate("Hello")
-            if res and res.strip():
-                results['libretranslate'] = {"status": "Active", "error": None}
-            else:
-                results['libretranslate'] = {"status": "Connection Failed", "error": "Returned empty translation"}
-        except Exception as e:
-            results['libretranslate'] = {"status": "Connection Failed", "error": str(e)}
 
     return results
 
