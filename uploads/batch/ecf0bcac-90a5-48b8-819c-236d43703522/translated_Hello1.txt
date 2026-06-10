@@ -1,0 +1,12 @@
+Datos Personales
+
+Nombre: Carlos Martínez 
+Correo Electrónico: carlos.martinez@example.com
+
+Biografía
+
+Me llamo Carlos Martínez. Tengo 28 años y vivo en Madrid, España. Soy ingeniero de software y trabajo en una empresa de tecnología.
+
+Me gusta aprender nuevos idiomas, leer libros y viajar a diferentes lugares. También disfruto pasar tiempo con mi familia y amigos.
+
+Soy una persona responsable, trabajadora y siempre estoy dispuesta a aprender cosas nuevas.
