@@ -75,33 +75,66 @@ def translate_file(input_path, output_path, direction, engine, department, gloss
 
         elif ext == '.docx':
             doc = docx.Document(input_path)
-            
-            # Translate paragraphs
+
+            def translate_paragraph_preserving_format(p, direction, engine, department, glossary_rules, custom_words):
+                """Translate a paragraph while preserving run-level formatting."""
+                nonlocal word_count, masked_count, glossary_count, cost_val
+                full_text = p.text
+                if not full_text.strip():
+                    return
+                translated, w_c, m_c, g_c, _, _, c_v = translate_text(
+                    full_text, direction, engine, department, glossary_rules, custom_words
+                )
+                word_count += w_c
+                masked_count += m_c
+                glossary_count += g_c
+                cost_val += c_v
+
+                # Distribute translated text across runs proportionally, preserving formatting
+                runs = p.runs
+                if not runs:
+                    return
+                orig_total_len = len(full_text)
+                trans_total_len = len(translated)
+                if orig_total_len == 0:
+                    return
+
+                trans_pos = 0
+                for i, run in enumerate(runs):
+                    orig_len = len(run.text)
+                    if orig_len == 0:
+                        continue
+                    if i == len(runs) - 1:
+                        # Last run gets the remainder
+                        run.text = translated[trans_pos:]
+                    else:
+                        # Proportional split
+                        proportion = orig_len / orig_total_len
+                        trans_len = max(1, round(trans_total_len * proportion))
+                        # Try to break at a word boundary
+                        chunk = translated[trans_pos:trans_pos + trans_len]
+                        if trans_pos + trans_len < trans_total_len:
+                            # Find last space to avoid mid-word split
+                            last_space = chunk.rfind(' ')
+                            if last_space > 0:
+                                trans_len = last_space + 1
+                                chunk = translated[trans_pos:trans_pos + trans_len]
+                        run.text = chunk
+                        trans_pos += len(chunk)
+
+            # Translate paragraphs preserving formatting
             for p in doc.paragraphs:
                 if p.text.strip():
-                    translated, w_c, m_c, g_c, _, _, c_v = translate_text(
-                        p.text, direction, engine, department, glossary_rules, custom_words
-                    )
-                    p.text = translated
-                    word_count += w_c
-                    masked_count += m_c
-                    glossary_count += g_c
-                    cost_val += c_v
+                    translate_paragraph_preserving_format(p, direction, engine, department, glossary_rules, custom_words)
 
-            # Translate tables
+            # Translate tables preserving formatting
             for table in doc.tables:
                 for row in table.rows:
                     for cell in row.cells:
                         for p in cell.paragraphs:
                             if p.text.strip():
-                                translated, w_c, m_c, g_c, _, _, c_v = translate_text(
-                                    p.text, direction, engine, department, glossary_rules, custom_words
-                                )
-                                p.text = translated
-                                word_count += w_c
-                                masked_count += m_c
-                                glossary_count += g_c
-                                cost_val += c_v
+                                translate_paragraph_preserving_format(p, direction, engine, department, glossary_rules, custom_words)
+
             doc.save(output_path)
 
         elif ext == '.xlsx':

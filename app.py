@@ -1,21 +1,27 @@
 import os
+import io
 import uuid
+import secrets
 import zipfile
 import threading
+import time
+from datetime import datetime, timedelta
+from functools import wraps
+
 import pymysql
 import pymysql.cursors
 from dotenv import load_dotenv
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file
+from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
 
 # Load Environment Variables from .env file
 load_dotenv()
 
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file
-from werkzeug.utils import secure_filename
-
 # Import Services
 from services.translatorr import translate_text, get_engine_display_name, check_api_connections
 from services.filehandler import translate_file
-from services.audit_service import log_action, get_audit_logs, export_audit_csv
+from services.audit_service import log_action, get_audit_logs, export_audit_csv, log_login_event
 from services.glossary import get_glossary_rules
 
 app = Flask(__name__)
@@ -38,7 +44,12 @@ def clear_simulated_mailbox():
     """Clear simulated mailbox (no-op)."""
     pass
 
-app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET', 'dev-secret-key-1337-enterprise')
+# Generate a unique token each time the server starts.
+# This invalidates all old browser session cookies automatically,
+# so every server restart forces users to log in again.
+_STARTUP_TOKEN = secrets.token_hex(16)
+app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET', 'dev-secret-key-1337-enterprise') + _STARTUP_TOKEN
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 BATCH_FOLDER = os.path.join(UPLOAD_FOLDER, 'batch')
@@ -106,6 +117,75 @@ def get_db_connection(use_db=True):
             cursorclass=CompatibleDictCursor
         )
 
+
+def login_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not session.get('user_id'):
+            return redirect(url_for('login'))
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+def admin_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not session.get('user_id') or session.get('role') != 'admin':
+            return redirect(url_for('dashboard'))
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+def parse_direction(direction):
+    direction = direction.lower()
+    if direction in ('en-es', 'eng-spa', 'english-spanish', 'english to spanish'):
+        return 'en', 'es'
+    if direction in ('es-en', 'spa-eng', 'spanish-english', 'spanish to english'):
+        return 'es', 'en'
+    return ('en', 'es')
+
+
+def record_translation(conn, user_id, username, source_language, target_language, filename, file_type, file_size, word_count, status, processing_time, translated_text, engine, confidence_score, cost):
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO translations
+        (user_id, username, source_language, target_language, filename, file_type, file_size,
+         word_count, status, processing_time, translated_text, engine, confidence_score, cost)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """,
+        (user_id, username, source_language, target_language, filename, file_type, file_size,
+         word_count, status, processing_time, translated_text, engine, confidence_score, cost)
+    )
+    conn.commit()
+
+    # Update analytics summary table for the day (persists permanently in MySQL)
+    today = datetime.utcnow().date()
+    cursor.execute("SELECT id FROM analytics_summary WHERE report_date = %s", (today,))
+    row = cursor.fetchone()
+    if row:
+        cursor.execute(
+            """
+            UPDATE analytics_summary
+            SET total_translations = total_translations + 1,
+                total_words = total_words + %s,
+                files_processed = files_processed + 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE report_date = %s
+            """,
+            (word_count, today)
+        )
+    else:
+        cursor.execute(
+            """
+            INSERT INTO analytics_summary (report_date, total_translations, total_words, files_processed)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (today, 1, word_count, 1)
+        )
+    conn.commit()
+
+
 def init_db():
     # Connect to MySQL server without selecting a database first
     conn = get_db_connection(use_db=False)
@@ -124,9 +204,13 @@ def init_db():
     CREATE TABLE IF NOT EXISTS users(
         id INT AUTO_INCREMENT PRIMARY KEY,
         username VARCHAR(255) UNIQUE,
-        email VARCHAR(255),
-        role VARCHAR(50),
-        department VARCHAR(100) DEFAULT 'Engineering'
+        full_name VARCHAR(255),
+        email VARCHAR(255) UNIQUE,
+        password_hash VARCHAR(255),
+        role VARCHAR(50) DEFAULT 'guest',
+        active BOOLEAN DEFAULT TRUE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )
     """)
     
@@ -134,23 +218,58 @@ def init_db():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS translations(
         id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT,
         username VARCHAR(255),
+        source_language VARCHAR(50),
+        target_language VARCHAR(50),
         filename VARCHAR(255),
+        file_type VARCHAR(50),
         file_size INT DEFAULT 0,
-        direction VARCHAR(50) DEFAULT 'eng-spa',
-        total_words INT DEFAULT 0,
-        masked_words INT DEFAULT 0,
-        glossary_words INT DEFAULT 0,
+        word_count INT DEFAULT 0,
+        status VARCHAR(50) DEFAULT 'Completed',
+        processing_time DOUBLE DEFAULT 0.0,
         translated_text LONGTEXT,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         engine VARCHAR(50) DEFAULT 'google',
-        department VARCHAR(100) DEFAULT 'Engineering',
         confidence_score DOUBLE DEFAULT 95.0,
-        cost DOUBLE DEFAULT 0.0
+        cost DOUBLE DEFAULT 0.0,
+        translated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
     )
     """)
     
-    # 3. Custom Glossary Table
+    # 3. Login Audit Table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS login_audit(
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT,
+        username VARCHAR(255),
+        email VARCHAR(255),
+        role VARCHAR(50),
+        ip_address VARCHAR(100),
+        login_time DATETIME,
+        logout_time DATETIME,
+        status VARCHAR(50),
+        details TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+    )
+    """)
+    
+    # 4. Analytics Summary Table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS analytics_summary(
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        report_date DATE UNIQUE,
+        total_translations INT DEFAULT 0,
+        total_words INT DEFAULT 0,
+        files_processed INT DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+    """)
+    
+    # 5. Custom Glossary Table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS glossary(
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -160,7 +279,7 @@ def init_db():
     )
     """)
     
-    # 4. Comprehensive Audit Logs Table
+    # 6. Comprehensive Audit Logs Table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS audit_logs(
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -171,7 +290,7 @@ def init_db():
     )
     """)
     
-    # 5. Bulk Batch Jobs Table
+    # 7. Bulk Batch Jobs Table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS batch_jobs(
         id VARCHAR(255) PRIMARY KEY,
@@ -190,51 +309,95 @@ def init_db():
     cursor.execute("SHOW COLUMNS FROM translations")
     columns_translations = [row['Field'] for row in cursor.fetchall()]
     for col, c_type in [
-        ('file_size', 'INT DEFAULT 0'),
-        ('direction', "VARCHAR(50) DEFAULT 'eng-spa'"),
-        ('glossary_words', 'INT DEFAULT 0'),
-        ('engine', "VARCHAR(50) DEFAULT 'google'"),
-        ('department', "VARCHAR(100) DEFAULT 'Engineering'"),
+        ('user_id', 'INT'),
+        ('source_language', "VARCHAR(50)"),
+        ('target_language', "VARCHAR(50)"),
+        ('file_type', "VARCHAR(50)"),
+        ('word_count', 'INT DEFAULT 0'),
+        ('status', "VARCHAR(50) DEFAULT 'Completed'"),
+        ('processing_time', 'DOUBLE DEFAULT 0.0'),
+        ('translated_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP'),
         ('confidence_score', 'DOUBLE DEFAULT 95.0'),
         ('cost', 'DOUBLE DEFAULT 0.0')
     ]:
         if col not in columns_translations:
             cursor.execute(f"ALTER TABLE translations ADD COLUMN {col} {c_type}")
-            
+
+    if 'department' in columns_translations:
+        cursor.execute("ALTER TABLE translations DROP COLUMN department")
+
     cursor.execute("SHOW COLUMNS FROM users")
     columns_users = [row['Field'] for row in cursor.fetchall()]
-    if 'department' not in columns_users:
-        cursor.execute("ALTER TABLE users ADD COLUMN department VARCHAR(100) DEFAULT 'Engineering'")
-        
-    # Clear translation records on startup to start from 0
-    cursor.execute("DELETE FROM translations")
-    cursor.execute("DELETE FROM batch_jobs")
-    conn.commit()
+    for col, c_type in [
+        ('full_name', 'VARCHAR(255)'),
+        ('password_hash', 'VARCHAR(255)'),
+        ('active', 'BOOLEAN DEFAULT TRUE'),
+        ('created_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP'),
+        ('updated_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')
+    ]:
+        if col not in columns_users:
+            cursor.execute(f"ALTER TABLE users ADD COLUMN {col} {c_type}")
 
-    # 7. Seed Initial Enterprise Users
+    if 'department' in columns_users:
+        cursor.execute("ALTER TABLE users DROP COLUMN department")
+
+    cursor.execute("SHOW TABLES LIKE 'login_audit'")
+    if not cursor.fetchone():
+        cursor.execute("""
+        CREATE TABLE login_audit(
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT,
+            username VARCHAR(255),
+            email VARCHAR(255),
+            role VARCHAR(50),
+            ip_address VARCHAR(100),
+            login_time DATETIME,
+            logout_time DATETIME,
+            status VARCHAR(50),
+            details TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+        )
+        """)
+
+    cursor.execute("SHOW TABLES LIKE 'analytics_summary'")
+    if not cursor.fetchone():
+        cursor.execute("""
+        CREATE TABLE analytics_summary(
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            report_date DATE UNIQUE,
+            total_translations INT DEFAULT 0,
+            total_words INT DEFAULT 0,
+            files_processed INT DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+        """)
+
+    # Seed Initial Enterprise Users
     initial_users = [
-        ('AdminUser', 'admin@company.com', 'admin', 'Operations'),
-        ('ManagerUser', 'manager@company.com', 'manager', 'Engineering'),
-        ('StaffUser', 'staff@company.com', 'staff', 'Engineering'),
-        ('JohnDoe', 'john.doe@company.com', 'staff', 'Legal'),
-        ('SalesAgent', 'sales@company.com', 'staff', 'Sales'),
-        ('GuestUser', 'guest@company.com', 'guest', 'Engineering'),
+        ('AdminUser', 'Admin User', 'admin@company.com', 'admin'),
+        ('ManagerUser', 'Manager User', 'manager@company.com', 'manager'),
+        ('StaffUser', 'Staff User', 'staff@company.com', 'staff'),
+        ('JohnDoe', 'John Doe', 'john.doe@company.com', 'staff'),
+        ('SalesAgent', 'Sales Agent', 'sales@company.com', 'staff'),
+        ('GuestUser', 'Guest User', 'guest@company.com', 'guest'),
     ]
-    for username, email, role, dept in initial_users:
+    for username, full_name, email, role in initial_users:
         cursor.execute(
-            "INSERT IGNORE INTO users (username, email, role, department) VALUES (%s, %s, %s, %s)",
-            (username, email, role, dept)
+            "INSERT IGNORE INTO users (username, full_name, email, role, password_hash, active) VALUES (%s, %s, %s, %s, %s, TRUE)",
+            (username, full_name, email, role, generate_password_hash('password'))
         )
         
-    # 8. Seed Sample Glossary Terms
+    # Seed Sample Glossary Terms
     sample_glossary = [
         ('WebLogic', '', 'all'),  # Do Not Translate
         ('Director General', 'Director General', 'eng-spa'),  # Fixed Translation
         ('DocTranslate', '', 'all'),  # Do Not Translate
         ('CEO', 'Director Ejecutivo', 'eng-spa'),
     ]
-    cursor.execute("SELECT COUNT(*) FROM glossary")
-    if cursor.fetchone()[0] == 0:
+    cursor.execute("SELECT COUNT(*) AS count FROM glossary")
+    if cursor.fetchone()['count'] == 0:
         for src, tgt, direction in sample_glossary:
             cursor.execute(
                 "INSERT INTO glossary (source_term, target_term, direction) VALUES (%s, %s, %s)",
@@ -251,8 +414,7 @@ init_db()
 def get_current_user():
     return {
         'username': session.get('username'),
-        'role': session.get('role', 'staff'),
-        'department': session.get('department', 'Engineering')
+        'role': session.get('role', 'staff')
     }
 
 # --- Batch Translation Background Thread ---
@@ -270,10 +432,15 @@ def process_batch_job(job_id, files_list, direction, engine, department, usernam
     total_glossary = 0
     total_cost = 0.0
     
+    cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
+    user_record = cursor.fetchone()
+    user_id = user_record['id'] if user_record else None
+    
     for idx, (original_filename, temp_filepath) in enumerate(files_list):
         safe_name = secure_filename(original_filename)
         output_filepath = os.path.join(job_dir, f"translated_{safe_name}")
         
+        start_time = time.perf_counter()
         try:
             # Dispatch to appropriate parser
             p_words, p_masked, p_glossary, p_confidence, p_cost = translate_file(
@@ -285,6 +452,29 @@ def process_batch_job(job_id, files_list, direction, engine, department, usernam
             total_masked += p_masked
             total_glossary += p_glossary
             total_cost += p_cost
+
+            processing_time = round(time.perf_counter() - start_time, 3)
+            source_language, target_language = parse_direction(direction)
+            file_type = os.path.splitext(original_filename)[1].lower().lstrip('.') or 'unknown'
+            file_size = os.path.getsize(temp_filepath) if os.path.exists(temp_filepath) else 0
+
+            record_translation(
+                conn,
+                user_id,
+                username,
+                source_language,
+                target_language,
+                original_filename,
+                file_type,
+                file_size,
+                p_words,
+                'Completed',
+                processing_time,
+                None,
+                engine,
+                p_confidence,
+                p_cost
+            )
             
         except Exception as e:
             print(f"Error in batch translating {original_filename}: {e}")
@@ -355,70 +545,219 @@ def process_batch_job(job_id, files_list, direction, engine, department, usernam
 
 # --- ROUTES ---
 
+def get_client_ip():
+    if request.headers.get('X-Forwarded-For'):
+        return request.headers.get('X-Forwarded-For').split(',')[0].strip()
+    return request.remote_addr or 'unknown'
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    error = None
     if request.method == 'POST':
-        # Default fallback is StaffUser
-        username = request.form.get('username', '').strip() or 'StaffUser'
-        selected_role = request.form.get('role', 'staff')
-        
+        credentials = request.form
+        user_input = credentials.get('username', '').strip()
+        password = credentials.get('password', '')
+        if not user_input or not password:
+            error = 'Please enter your email/username and password.'
+        else:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, username, full_name, email, password_hash, role, active FROM users WHERE username = %s OR email = %s",
+                (user_input, user_input)
+            )
+            user_row = cursor.fetchone()
+            ip_address = get_client_ip()
+            login_time = datetime.utcnow()
+            login_status = 'failed'
+            login_details = None
+            login_audit_id = None
+
+            if not user_row:
+                login_details = 'User not found.'
+            elif not user_row['active']:
+                login_details = 'Account is inactive.'
+            elif not user_row['password_hash'] or not check_password_hash(user_row['password_hash'], password):
+                login_details = 'Invalid password.'
+            else:
+                login_status = 'success'
+                session['user_id'] = user_row['id']
+                session['username'] = user_row['username']
+                session['role'] = user_row['role']
+                session['full_name'] = user_row.get('full_name') or user_row['username']
+
+            if user_row:
+                login_audit_id = log_login_event(
+                    conn,
+                    user_row['id'],
+                    user_row['username'],
+                    user_row['email'],
+                    user_row['role'],
+                    ip_address,
+                    login_time,
+                    None,
+                    login_status,
+                    login_details
+                )
+            else:
+                log_login_event(
+                    conn,
+                    None,
+                    user_input,
+                    user_input,
+                    'unknown',
+                    ip_address,
+                    login_time,
+                    None,
+                    'failed',
+                    login_details
+                )
+
+            if login_status == 'success':
+                log_action(conn, session['username'], 'login', 'User authenticated successfully.')
+                conn.close()
+                return redirect(url_for('dashboard'))
+
+            error = 'Invalid login credentials or inactive account.'
+            conn.close()
+
+    if session.get('user_id'):
+        return redirect(url_for('dashboard'))
+    return render_template('login.html', error=error)
+
+@app.route('/register', methods=['POST'])
+def register():
+    error = None
+    username = request.form.get('username', '').strip()
+    full_name = request.form.get('full_name', '').strip()
+    email = request.form.get('email', '').strip().lower()
+    password = request.form.get('password', '')
+    confirm_password = request.form.get('confirm_password', '')
+
+    if not username or not full_name or not email or not password or not confirm_password:
+        error = 'All fields are required for registration.'
+    elif password != confirm_password:
+        error = 'Password and confirm password do not match.'
+    elif len(password) < 8:
+        error = 'Password must be at least 8 characters long.'
+    else:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        # Check if user exists by username or email
-        cursor.execute("SELECT username, email, role, department FROM users WHERE username = %s OR email = %s", (username, username))
-        user_row = cursor.fetchone()
-        
-        if user_row:
-            db_username = user_row['username']
-            # Update role dynamically based on login demo panel
-            cursor.execute("UPDATE users SET role = %s WHERE username = %s", (selected_role, db_username))
-            role = selected_role
-            email = user_row['email']
-            department = user_row['department']
-            username = db_username
+        cursor.execute("SELECT id FROM users WHERE username = %s OR email = %s", (username, email))
+        existing = cursor.fetchone()
+        if existing:
+            error = 'Username or email is already registered.'
         else:
-            # Register new demo user
-            db_username = username.split('@')[0] if '@' in username else username
-            email = username if '@' in username else f"{username}@company.com"
-            department = 'Engineering'
-            if selected_role == 'admin':
-                department = 'Operations'
-            elif selected_role == 'manager':
-                department = 'Engineering'
+            password_hash = generate_password_hash(password)
             cursor.execute(
-                "INSERT INTO users (username, email, role, department) VALUES (%s, %s, %s, %s)",
-                (db_username, email, selected_role, department)
+                "INSERT INTO users (username, full_name, email, password_hash, role, active) VALUES (%s, %s, %s, %s, 'guest', TRUE)",
+                (username, full_name, email, password_hash)
             )
-            role = selected_role
-            username = db_username
-            
-        conn.commit()
-        
-        # Set session details
-        session['username'] = username
-        session['role'] = role
-        session['department'] = department
-        
-        log_action(conn, username, "login", f"User logged in as {role} inside the {department} department.")
+            conn.commit()
+            user_id = cursor.lastrowid
+            log_login_event(
+                conn,
+                user_id,
+                username,
+                email,
+                'guest',
+                get_client_ip(),
+                datetime.utcnow(),
+                None,
+                'registered',
+                'New user registration'
+            )
+            log_action(conn, username, 'register', 'New account created.')
+            conn.close()
+            session['user_id'] = user_id
+            session['username'] = username
+            session['role'] = 'guest'
+            session['full_name'] = full_name
+            return redirect(url_for('dashboard'))
         conn.close()
-        
-        return redirect(url_for('dashboard'))
-        
-    if session.get('username'):
-        return redirect(url_for('dashboard'))
-        
-    return render_template('login.html')
+
+    return render_template('login.html', error=error, active_tab='register')
 
 @app.route('/logout')
 def logout():
     username = session.get('username')
+    user_id = session.get('user_id')
     if username:
         conn = get_db_connection()
-        log_action(conn, username, "logout", "User logged out of active session.")
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE login_audit SET logout_time = %s WHERE user_id = %s AND status IN ('success','failed') ORDER BY id DESC LIMIT 1",
+            (datetime.utcnow(), user_id)
+        )
+        log_action(conn, username, 'logout', 'User logged out of active session.')
         conn.close()
     session.clear()
     return redirect(url_for('login'))
+
+@app.route('/account/update', methods=['POST'])
+@login_required
+def account_update():
+    user_id = session.get('user_id')
+    username = request.form.get('username', '').strip()
+    full_name = request.form.get('full_name', '').strip()
+    email = request.form.get('email', '').strip().lower()
+    current_password = request.form.get('current_password', '')
+    password = request.form.get('password', '')
+
+    if not username or not email or not full_name:
+        session['account_error'] = 'Username, Full Name, and Email are required.'
+        return redirect(url_for('dashboard', _anchor='accountTab'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Check if username or email is already taken by another user
+        cursor.execute("SELECT id FROM users WHERE (username = %s OR email = %s) AND id != %s", (username, email, user_id))
+        existing = cursor.fetchone()
+        if existing:
+            session['account_error'] = 'Username or Email address already exists!'
+            return redirect(url_for('dashboard', _anchor='accountTab'))
+
+        if password:
+            if not current_password:
+                session['account_error'] = 'Current password is required to set a new password.'
+                return redirect(url_for('dashboard', _anchor='accountTab'))
+                
+            cursor.execute("SELECT password_hash FROM users WHERE id = %s", (user_id,))
+            user_row = cursor.fetchone()
+            if not user_row or not check_password_hash(user_row['password_hash'], current_password):
+                session['account_error'] = 'Incorrect current password!'
+                return redirect(url_for('dashboard', _anchor='accountTab'))
+
+            if len(password) < 8:
+                session['account_error'] = 'Password must be at least 8 characters long.'
+                return redirect(url_for('dashboard', _anchor='accountTab'))
+            password_hash = generate_password_hash(password)
+            cursor.execute(
+                "UPDATE users SET username = %s, full_name = %s, email = %s, password_hash = %s WHERE id = %s",
+                (username, full_name, email, password_hash, user_id)
+            )
+        else:
+            cursor.execute(
+                "UPDATE users SET username = %s, full_name = %s, email = %s WHERE id = %s",
+                (username, full_name, email, user_id)
+            )
+
+        conn.commit()
+
+        # Update session info
+        session['username'] = username
+        session['full_name'] = full_name
+
+        log_action(conn, username, 'update_profile', f"User profile updated: username={username}, email={email}")
+        session['account_success'] = 'Profile updated successfully!'
+    except Exception as e:
+        session['account_error'] = f"An error occurred: {str(e)}"
+    finally:
+        conn.close()
+
+    return redirect(url_for('dashboard', _anchor='accountTab'))
 
 @app.route('/upload', methods=['GET', 'POST'])
 def upload():
@@ -475,15 +814,12 @@ def upload():
 
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/dashboard', methods=['GET', 'POST'])
+@login_required
 def dashboard():
-    if not session.get('username'):
-        return redirect(url_for('login'))
-        
     username = session.get('username')
     role = session.get('role', 'staff')
-    department = session.get('department', 'Engineering')
-    is_admin = (role == 'admin')
-    is_manager = (role == 'manager' or is_admin)
+    is_admin = role == 'admin'
+    is_manager = role == 'manager' or is_admin
     
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -513,10 +849,11 @@ def dashboard():
         
         # Determine if file or raw text
         file = request.files.get('document')
+        user_id = session.get('user_id')
         
         if file and file.filename != '':
             if not allowed_file(file.filename):
-                error = 'Unsupported file format! Upload docx, xlsx, txt or csv.'
+                error = 'Unsupported file format! Upload DOCX, XLSX, TXT, CSV, or PDF.'
             else:
                 filename_used = file.filename
                 safe_name = secure_filename(file.filename)
@@ -527,85 +864,82 @@ def dashboard():
                 file_size_bytes = os.path.getsize(temp_in)
                 
                 try:
-                    # Parse document and translate
+                    start_time = time.perf_counter()
                     p_words, p_masked, p_glossary, p_confidence, p_cost = translate_file(
-                        temp_in, temp_out, direction, selected_engine, department, glossary_rules, custom_words
+                        temp_in, temp_out, direction, selected_engine, 'general', glossary_rules, custom_words
                     )
+                    processing_time = round(time.perf_counter() - start_time, 3)
                     
-                    # Read the final translated text preview (up to 10kb) for display
                     ext = os.path.splitext(safe_name)[1].lower()
                     if ext in ('.txt', '.csv'):
                         with open(temp_out, 'r', encoding='utf-8', errors='ignore') as preview_f:
                             translated = preview_f.read(10000)
                     else:
-                        translated = f"Format-Preserved {ext.upper()} Translation complete. File is ready for download."
-                        
+                        translated = f"Format-preserved {ext.upper()} translation complete. File is ready for download."
+                    
                     total_words = p_words
                     masked_words = p_masked
                     glossary_words = p_glossary
                     confidence_score = p_confidence
                     cost = p_cost
                     
-                    # Log translation to table if not guest
-                    if role != 'guest':
-                        cursor.execute(
-                            """INSERT INTO translations 
-                            (username, filename, file_size, direction, total_words, masked_words, glossary_words, translated_text, engine, department, confidence_score, cost) 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                            (username, filename_used, file_size_bytes, direction, total_words, masked_words, glossary_words, translated, selected_engine, department, confidence_score, cost)
-                        )
-                        
-                        # Write in audit log
-                        log_action(conn, username, "file_translation", f"Translated '{filename_used}' ({p_words:,} words) using {selected_engine} engine.")
-                        conn.commit()
-                    
-                    # check_and_notify_manager omitted as notifications disabled
-                    
+                    source_language, target_language = parse_direction(direction)
+                    record_translation(
+                        conn,
+                        user_id,
+                        username,
+                        source_language,
+                        target_language,
+                        filename_used,
+                        ext.lstrip('.') or 'unknown',
+                        file_size_bytes,
+                        p_words,
+                        'Completed',
+                        processing_time,
+                        None,
+                        selected_engine,
+                        p_confidence,
+                        p_cost
+                    )
+
+                    log_action(conn, username, 'file_translation', f"Translated '{filename_used}' ({p_words:,} words) using {selected_engine}.")
                 except Exception as e:
                     error = f"Translation engine failure: {e}"
                     print(f"Translation Crash: {e}")
         else:
-            # Raw text translation
             raw_text = request.form.get('raw_text', '').strip()
             if raw_text:
+                start_time = time.perf_counter()
                 translated, total_words, masked_words, glossary_words, confidence_score, paragraphs, cost = translate_text(
-                    raw_text, direction, selected_engine, department, glossary_rules, custom_words
+                    raw_text, direction, selected_engine, 'general', glossary_rules, custom_words
                 )
+                processing_time = round(time.perf_counter() - start_time, 3)
                 
-                # Log translation if not guest
-                if role != 'guest':
-                    cursor.execute(
-                        """INSERT INTO translations 
-                        (username, filename, file_size, direction, total_words, masked_words, glossary_words, translated_text, engine, department, confidence_score, cost) 
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                        (username, "Text Box Input", len(raw_text), direction, total_words, masked_words, glossary_words, translated, selected_engine, department, confidence_score, cost)
-                    )
-                    conn.commit()
+                source_language, target_language = parse_direction(direction)
+                record_translation(
+                    conn,
+                    user_id,
+                    username,
+                    source_language,
+                    target_language,
+                    'Text Box Input',
+                    'text',
+                    len(raw_text),
+                    total_words,
+                    'Completed',
+                    processing_time,
+                    translated,
+                    selected_engine,
+                    confidence_score,
+                    cost
+                )
+                log_action(conn, username, 'text_translation', f"Translated raw text input ({total_words:,} words) using {selected_engine}.")
                 
-                # Check manager sensitivity notifications
-                # Pass placeholders by parsing raw paragraph details
-                pii_payload = {}
-                for p in paragraphs:
-                    if p.get('masked_count', 0) > 0:
-                        # Extract salary/ID flags
-                        for flg in p.get('flags', []):
-                            if "salary" in flg.lower():
-                                pii_payload['[SALARY_1]'] = "$120,000"
-                            if "ID" in flg.lower():
-                                pii_payload['[ID_1]'] = "111-222-3333"
-                                pii_payload['[ID_2]'] = "444-555-6666"
-                                pii_payload['[ID_3]'] = "777-888-9999"
-                                
                 # check_and_notify_manager omitted as notifications disabled
 
     # 2. Retrieve DB records depending on RBAC permissions
-    # Staff: only their history
-    # Manager: full department history
-    # Admin: absolute global history
-    if role == 'admin':
+    if is_admin or is_manager:
         cursor.execute("SELECT * FROM translations ORDER BY id DESC LIMIT 100")
-    elif role == 'manager':
-        cursor.execute("SELECT * FROM translations WHERE department = %s ORDER BY id DESC LIMIT 100", (department,))
     else:
         cursor.execute("SELECT * FROM translations WHERE username = %s ORDER BY id DESC LIMIT 50", (username,))
     history = cursor.fetchall()
@@ -615,76 +949,72 @@ def dashboard():
     glossary = cursor.fetchall()
 
     # 4. Gather Dashboard Stats (Usage Analytics)
-    # A. Translations volume by day
     cursor.execute("""
-        SELECT DATE_FORMAT(timestamp, '%%m-%%d') as day, COUNT(*) as count, SUM(total_words) as words 
-        FROM translations 
-        GROUP BY day 
-        ORDER BY MIN(timestamp) DESC LIMIT 7
+        SELECT DATE_FORMAT(translated_at, '%%m-%%d') as day, COUNT(*) as count, SUM(word_count) as words
+        FROM translations
+        GROUP BY day
+        ORDER BY MIN(translated_at) DESC LIMIT 7
     """)
     daily_stats = cursor.fetchall()
     
-    # B. Engine breakdown
     cursor.execute("SELECT engine, COUNT(*) as count, SUM(cost) as total_cost FROM translations GROUP BY engine")
     engine_stats = cursor.fetchall()
+
+    cursor.execute("SELECT CONCAT(source_language, ' → ', target_language) AS pair, COUNT(*) AS count FROM translations GROUP BY source_language, target_language ORDER BY count DESC")
+    language_pair_stats = cursor.fetchall()
     
-    # C. Department breakdown
-    cursor.execute("SELECT department, COUNT(*) as count, SUM(total_words) as words FROM translations GROUP BY department")
-    department_stats = cursor.fetchall()
-    
-    # D. Quick summary counters
-    cursor.execute("SELECT COUNT(*) FROM translations WHERE filename != 'Text Box Input'")
+    cursor.execute("SELECT COUNT(*) FROM translations")
     stat_total_translations = cursor.fetchone()[0]
 
-    cursor.execute("SELECT SUM(total_words) FROM translations")
+    cursor.execute("SELECT SUM(word_count) FROM translations")
     stat_total_words = cursor.fetchone()[0] or 0
-
-    # E. Active Department, Common Direction, Avg File Size
-    cursor.execute("SELECT department, COUNT(*) as count FROM translations GROUP BY department ORDER BY count DESC LIMIT 1")
-    active_dept_row = cursor.fetchone()
-    stat_active_dept = active_dept_row['department'] if active_dept_row else "None"
-
-    cursor.execute("SELECT direction, COUNT(*) as count FROM translations GROUP BY direction ORDER BY count DESC LIMIT 1")
-    common_dir_row = cursor.fetchone()
-    stat_common_dir = common_dir_row['direction'].upper() if common_dir_row else "None"
 
     cursor.execute("SELECT AVG(file_size) FROM translations WHERE file_size > 0")
     avg_file_row = cursor.fetchone()
     stat_avg_file_size = round(float(avg_file_row[0] or 0.0) / 1024.0, 1) if avg_file_row else 0.0
 
-    cursor.execute("SELECT AVG(confidence_score) FROM translations")
-    avg_conf_row = cursor.fetchone()
-    stat_avg_confidence = round(float(avg_conf_row[0] or 0.0), 1) if avg_conf_row else 0.0
+    cursor.execute("SELECT source_language, target_language, COUNT(*) as count FROM translations GROUP BY source_language, target_language ORDER BY count DESC LIMIT 1")
+    common_dir_row = cursor.fetchone()
+    stat_common_dir = f"{common_dir_row['source_language']} → {common_dir_row['target_language']}" if common_dir_row else "None"
 
-    # Retrieve simulated emails queue
     emails = []  # Simulated mailbox disabled
-
-    # Retrieve all users for user management tab (Admin only)
     users = []
     if is_admin:
-        cursor.execute("SELECT id, username, email, role, department FROM users ORDER BY username")
+        cursor.execute("SELECT id, username, full_name, email, role, active FROM users ORDER BY username")
         users = cursor.fetchall()
 
+    cursor.execute("SELECT id, username, full_name, email, role FROM users WHERE id = %s", (session.get('user_id'),))
+    current_user = cursor.fetchone()
+    if not current_user:
+        current_user = {
+            'username': username,
+            'full_name': session.get('full_name') or username,
+            'email': '',
+            'role': role
+        }
+
     conn.close()
+
+    user_error = session.pop('user_error', None)
+    user_success = session.pop('user_success', None)
+    account_error = session.pop('account_error', None)
+    account_success = session.pop('account_success', None)
 
     return render_template(
         'dashboard.html',
         username=username,
         role=role,
-        department=department,
         is_admin=is_admin,
         is_manager=is_manager,
         history=history,
         glossary=glossary,
         daily_stats=daily_stats,
         engine_stats=engine_stats,
-        department_stats=department_stats,
+        language_pair_stats=language_pair_stats,
         stat_total_translations=stat_total_translations,
         stat_total_words=stat_total_words,
-        stat_active_dept=stat_active_dept,
         stat_common_dir=stat_common_dir,
         stat_avg_file_size=stat_avg_file_size,
-        stat_avg_confidence=stat_avg_confidence,
         error=error,
         translated=translated,
         total_words=total_words,
@@ -695,7 +1025,12 @@ def dashboard():
         cost=cost,
         emails=emails,
         users=users,
-        filename_used=filename_used
+        filename_used=filename_used,
+        user_error=user_error,
+        user_success=user_success,
+        current_user=current_user,
+        account_error=account_error,
+        account_success=account_success
     )
 
 # --- BATCH FILE UPLOAD & PROGRESS BAR ---
@@ -866,44 +1201,70 @@ def glossary_delete(term_id):
 # --- USER MANAGEMENT ROUTE OVERRIDES ---
 
 @app.route('/manage-users/add', methods=['POST'])
+@admin_required
 def manage_users_add():
-    if not session.get('username') or session.get('role') != 'admin':
-        return redirect(url_for('dashboard'))
-        
     new_username = request.form.get('new_username', '').strip()
-    new_email = request.form.get('new_email', '').strip()
-    new_role = request.form.get('new_role', 'staff')
-    new_dept = request.form.get('new_dept', 'Engineering')
-    
-    if new_username and new_email:
-        conn = get_db_connection()
-        cursor = conn.cursor()
+    new_full_name = request.form.get('new_full_name', '').strip()
+    new_email = request.form.get('new_email', '').strip().lower()
+    new_role = request.form.get('new_role', 'guest')
+    new_password = request.form.get('new_password', 'password123').strip()
+
+    allowed_roles = ('admin', 'manager', 'staff', 'guest')
+    if new_role not in allowed_roles:
+        new_role = 'guest'
+
+    if not new_username or not new_email:
+        session['user_error'] = "Username and email address are required!"
+        return redirect(url_for('dashboard', _anchor='usersTab'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM users WHERE username = %s OR email = %s", (new_username, new_email))
+    if cursor.fetchone():
+        session['user_error'] = "Username or Email address already exists!"
+    else:
+        password_hash = generate_password_hash(new_password)
         cursor.execute(
-            "INSERT IGNORE INTO users (username, email, role, department) VALUES (%s, %s, %s, %s)",
-            (new_username, new_email, new_role, new_dept)
+            "INSERT INTO users (username, full_name, email, password_hash, role, active) VALUES (%s, %s, %s, %s, %s, TRUE)",
+            (new_username, new_full_name or new_username, new_email, password_hash, new_role)
         )
-        log_action(conn, session.get('username'), "create_user", f"Registered new user {new_username} ({new_role}) in {new_dept} department.")
+        log_action(conn, session.get('username'), 'create_user', f"Registered new user {new_username} ({new_role}).")
         conn.commit()
-        conn.close()
-        
+        session['user_success'] = f"Employee profile for {new_username} registered successfully!"
+    conn.close()
+    return redirect(url_for('dashboard', _anchor='usersTab'))
+
+@app.route('/manage-users/update-role/<int:user_id>', methods=['POST'])
+@admin_required
+def manage_users_update_role(user_id):
+    new_role = request.form.get('new_role', '').strip().lower()
+    allowed_roles = ('admin', 'manager', 'staff', 'guest')
+    if not new_role or new_role not in allowed_roles:
+        return redirect(url_for('dashboard', _anchor='usersTab'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT username, role FROM users WHERE id = %s", (user_id,))
+    user_row = cursor.fetchone()
+    # Admins can change any user's role except their own
+    if user_row and user_row['username'] != session.get('username'):
+        cursor.execute("UPDATE users SET role = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (new_role, user_id))
+        log_action(conn, session.get('username'), 'update_user_role', f"Changed role for {user_row['username']} from {user_row['role']} to {new_role}.")
+        conn.commit()
+    conn.close()
     return redirect(url_for('dashboard', _anchor='usersTab'))
 
 @app.route('/manage-users/delete/<int:user_id>', methods=['POST'])
+@admin_required
 def manage_users_delete(user_id):
-    if not session.get('username') or session.get('role') != 'admin':
-        return redirect(url_for('dashboard'))
-        
     conn = get_db_connection()
     cursor = conn.cursor()
-    
     cursor.execute("SELECT username FROM users WHERE id = %s", (user_id,))
     user_row = cursor.fetchone()
-    
     if user_row:
         cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
-        log_action(conn, session.get('username'), "delete_user", f"Removed user profile for '{user_row['username']}'.")
+        log_action(conn, session.get('username'), 'delete_user', f"Removed user profile for '{user_row['username']}'.")
         conn.commit()
-        
     conn.close()
     return redirect(url_for('dashboard', _anchor='usersTab'))
 
@@ -959,7 +1320,7 @@ def export_audits():
         mem_file,
         mimetype='text/csv',
         as_attachment=True,
-        download_name=f"DocTranslate_AuditLog_{datetime.datetime.now().strftime('%Y%m%d')}.csv"
+        download_name=f"DocTranslate_AuditLog_{datetime.now().strftime('%Y%m%d')}.csv"
     )
 
 @app.route('/simulated-mail/clear', methods=['POST'])
@@ -970,41 +1331,274 @@ def clear_mail():
     return jsonify({'status': 'Mailbox cleared'})
 
 @app.route('/analytics/export', methods=['GET'])
+@login_required
 def export_analytics():
-    if not session.get('username') or session.get('role') not in ('admin', 'manager'):
+    if session.get('role') not in ('admin', 'manager'):
         return "Unauthorized", 403
-        
+
+    from_date_raw = request.args.get('from_date', '')
+    to_date_raw = request.args.get('to_date', '')
+    output_format = request.args.get('format', 'csv').lower()
+
+    query = "SELECT id, username, source_language, target_language, filename, file_type, file_size, word_count, status, processing_time, engine, confidence_score, cost, translated_at FROM translations"
+    params = []
+    filters = []
+
+    try:
+        if from_date_raw:
+            from_date = datetime.strptime(from_date_raw, '%Y-%m-%d')
+            filters.append('translated_at >= %s')
+            params.append(from_date.strftime('%Y-%m-%d 00:00:00'))
+        if to_date_raw:
+            to_date = datetime.strptime(to_date_raw, '%Y-%m-%d')
+            filters.append('translated_at <= %s')
+            params.append(to_date.strftime('%Y-%m-%d 23:59:59'))
+    except ValueError:
+        return "Invalid date range format. Use YYYY-MM-DD.", 400
+
+    if filters:
+        query += ' WHERE ' + ' AND '.join(filters)
+    query += ' ORDER BY translated_at DESC'
+
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, username, filename, file_size, direction, total_words, masked_words, glossary_words, engine, department, confidence_score, cost, timestamp FROM translations ORDER BY id DESC")
+    cursor.execute(query, params)
     rows = cursor.fetchall()
+
+    cursor.execute("SELECT COUNT(*) as total_translations, COALESCE(SUM(word_count),0) as total_words, COALESCE(AVG(file_size),0) as avg_file_size, COUNT(DISTINCT CONCAT(source_language,'-',target_language)) as lang_pairs FROM translations" + ((' WHERE ' + ' AND '.join(filters)) if filters else ''), params)
+    stats = cursor.fetchone()
+
+    # Language pair breakdown
+    cursor.execute("SELECT CONCAT(source_language, ' → ', target_language) AS pair, COUNT(*) AS count FROM translations" + ((' WHERE ' + ' AND '.join(filters)) if filters else '') + " GROUP BY source_language, target_language ORDER BY count DESC LIMIT 5", params)
+    pair_breakdown = cursor.fetchall()
+
+    # Daily counts for report
+    cursor.execute("SELECT DATE_FORMAT(translated_at, '%%Y-%%m-%%d') as day, COUNT(*) as count, COALESCE(SUM(word_count),0) as words FROM translations" + ((' WHERE ' + ' AND '.join(filters)) if filters else '') + " GROUP BY day ORDER BY day DESC LIMIT 10", params)
+    daily_counts = cursor.fetchall()
+
+    # User activity for report
+    cursor.execute("SELECT username, COUNT(*) as count, COALESCE(SUM(word_count),0) as words FROM translations" + ((' WHERE ' + ' AND '.join(filters)) if filters else '') + " GROUP BY username ORDER BY count DESC LIMIT 10", params)
+    user_activity = cursor.fetchall()
+
     conn.close()
-    
-    import csv
-    import io
-    import datetime
-    
+
+    report_name = f"DocTranslate_AnalyticsReport_{datetime.utcnow().strftime('%Y%m%d')}." + ('xlsx' if output_format == 'xlsx' else 'csv')
+
+    if output_format == 'xlsx':
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment
+        wb = Workbook()
+        summary = wb.active
+        summary.title = 'Summary'
+        # Header styling
+        header_font = Font(bold=True, size=12)
+        header_fill = PatternFill('solid', fgColor='DC2626')
+
+        summary.append(['DocTranslate Analytics Report'])
+        summary.append(['Report generated', datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')])
+        summary.append(['Period From', from_date_raw or 'All time'])
+        summary.append(['Period To', to_date_raw or 'All time'])
+        summary.append([])
+        summary.append(['SUMMARY METRICS', ''])
+        summary.append(['Total Translations', stats['total_translations']])
+        summary.append(['Total Words Processed', stats['total_words']])
+        summary.append(['Files Translated', stats['total_translations']])
+        summary.append(['Average File Size (KB)', round(float(stats['avg_file_size'] or 0) / 1024, 2)])
+        summary.append(['Language Pairs Used', stats.get('lang_pairs', 0)])
+        summary.append([])
+
+        # Language pair breakdown
+        summary.append(['LANGUAGE PAIR STATISTICS', ''])
+        summary.append(['Language Pair', 'Translation Count'])
+        for p in pair_breakdown:
+            summary.append([p['pair'], p['count']])
+        summary.append([])
+
+        # Daily counts
+        summary.append(['DAILY TRANSLATION COUNTS', ''])
+        summary.append(['Date', 'Translations', 'Words'])
+        for d in daily_counts:
+            summary.append([d['day'], d['count'], d['words']])
+        summary.append([])
+
+        # User activity
+        summary.append(['USER ACTIVITY SUMMARY', ''])
+        summary.append(['Username', 'Translations', 'Words'])
+        for u in user_activity:
+            summary.append([u['username'], u['count'], u['words']])
+
+        detail_sheet = wb.create_sheet('Translation Details')
+        detail_sheet.append(['ID', 'Username', 'Source Lang', 'Target Lang', 'Filename', 'File Type', 'File Size (Bytes)', 'Word Count', 'Status', 'Processing Time (s)', 'Engine', 'Translated At'])
+        for r in rows:
+            detail_sheet.append([r['id'], r['username'], r['source_language'], r['target_language'], r['filename'], r['file_type'], r['file_size'], r['word_count'], r['status'], r['processing_time'], r['engine'], str(r['translated_at'])])
+
+        mem_file = io.BytesIO()
+        wb.save(mem_file)
+        mem_file.seek(0)
+        return send_file(mem_file, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=report_name)
+
+    import csv as csv_module
+
     output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(['ID', 'Username', 'Filename', 'File Size (Bytes)', 'Direction', 'Total Words', 'Masked Words', 'Glossary Matches', 'Engine', 'Department', 'Confidence Score', 'Cost ($)', 'Timestamp'])
+    writer = csv_module.writer(output)
+    writer.writerow(['DocTranslate Analytics Report'])
+    writer.writerow(['Report generated', datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')])
+    writer.writerow(['Period From', from_date_raw or 'All time'])
+    writer.writerow(['Period To', to_date_raw or 'All time'])
+    writer.writerow([])
+    writer.writerow(['SUMMARY METRICS', ''])
+    writer.writerow(['Total Translations', stats['total_translations']])
+    writer.writerow(['Total Words Processed', stats['total_words']])
+    writer.writerow(['Files Translated', stats['total_translations']])
+    writer.writerow(['Average File Size (KB)', round(float(stats['avg_file_size'] or 0) / 1024, 2)])
+    writer.writerow(['Language Pairs Used', stats.get('lang_pairs', 0)])
+    writer.writerow([])
+    writer.writerow(['LANGUAGE PAIR STATISTICS', ''])
+    writer.writerow(['Language Pair', 'Count'])
+    for p in pair_breakdown:
+        writer.writerow([p['pair'], p['count']])
+    writer.writerow([])
+    writer.writerow(['DAILY TRANSLATION COUNTS', ''])
+    writer.writerow(['Date', 'Translations', 'Words'])
+    for d in daily_counts:
+        writer.writerow([d['day'], d['count'], d['words']])
+    writer.writerow([])
+    writer.writerow(['USER ACTIVITY SUMMARY', ''])
+    writer.writerow(['Username', 'Translations', 'Words'])
+    for u in user_activity:
+        writer.writerow([u['username'], u['count'], u['words']])
+    writer.writerow([])
+    writer.writerow(['TRANSLATION DETAILS', ''])
+    writer.writerow(['ID', 'Username', 'Source Lang', 'Target Lang', 'Filename', 'File Type', 'File Size (Bytes)', 'Word Count', 'Status', 'Processing Time (s)', 'Engine', 'Translated At'])
     for r in rows:
-        writer.writerow([r['id'], r['username'], r['filename'], r['file_size'], r['direction'], r['total_words'], r['masked_words'], r['glossary_words'], r['engine'], r['department'], r['confidence_score'], r['cost'], r['timestamp']])
-        
+        writer.writerow([r['id'], r['username'], r['source_language'], r['target_language'], r['filename'], r['file_type'], r['file_size'], r['word_count'], r['status'], r['processing_time'], r['engine'], str(r['translated_at'])])
+
     csv_data = output.getvalue()
     mem_file = io.BytesIO()
-    mem_file.write(csv_data.encode('utf-8'))
+    mem_file.write(csv_data.encode('utf-8-sig'))  # UTF-8 BOM for Excel compatibility
     mem_file.seek(0)
-    
-    return send_file(
-        mem_file,
-        mimetype='text/csv',
-        as_attachment=True,
-        download_name=f"DocTranslate_AnalyticsReport_{datetime.datetime.now().strftime('%Y%m%d')}.csv"
-    )
+    return send_file(mem_file, mimetype='text/csv', as_attachment=True, download_name=report_name)
 
-# Inject imports required inside endpoints
-import io
-import datetime
+@app.route('/analytics/export/pdf', methods=['GET'])
+@login_required
+def export_analytics_pdf():
+    if session.get('role') not in ('admin', 'manager'):
+        return "Unauthorized", 403
+
+    from_date_raw = request.args.get('from_date', '')
+    to_date_raw = request.args.get('to_date', '')
+    query = "SELECT username, source_language, target_language, filename, file_type, word_count, processing_time, engine, translated_at FROM translations"
+    params = []
+    filters = []
+
+    try:
+        if from_date_raw:
+            from_date = datetime.strptime(from_date_raw, '%Y-%m-%d')
+            filters.append('translated_at >= %s')
+            params.append(from_date.strftime('%Y-%m-%d 00:00:00'))
+        if to_date_raw:
+            to_date = datetime.strptime(to_date_raw, '%Y-%m-%d')
+            filters.append('translated_at <= %s')
+            params.append(to_date.strftime('%Y-%m-%d 23:59:59'))
+    except ValueError:
+        return "Invalid date filter format. Use YYYY-MM-DD.", 400
+
+    if filters:
+        query += ' WHERE ' + ' AND '.join(filters)
+    query += ' ORDER BY translated_at DESC LIMIT 1000'
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+
+    cursor.execute("SELECT COUNT(*) as total_translations, COALESCE(SUM(word_count),0) as total_words, COALESCE(AVG(file_size),0) as avg_file_size FROM translations" + ((' WHERE ' + ' AND '.join(filters)) if filters else ''), params)
+    stats = cursor.fetchone()
+    cursor.execute("SELECT source_language, target_language, COUNT(*) as count FROM translations" + ((' WHERE ' + ' AND '.join(filters)) if filters else '') + " GROUP BY source_language, target_language ORDER BY count DESC LIMIT 5", params)
+    pair_stats = cursor.fetchall()
+    cursor.execute("SELECT username, COUNT(*) as count, COALESCE(SUM(word_count),0) as words FROM translations" + ((' WHERE ' + ' AND '.join(filters)) if filters else '') + " GROUP BY username ORDER BY count DESC LIMIT 5", params)
+    user_stats = cursor.fetchall()
+    cursor.execute("SELECT DATE_FORMAT(translated_at, '%%m-%%d') as day, COUNT(*) as count FROM translations" + ((' WHERE ' + ' AND '.join(filters)) if filters else '') + " GROUP BY day ORDER BY MIN(translated_at) DESC LIMIT 7", params)
+    daily_stats = cursor.fetchall()
+    conn.close()
+
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+
+    pdf.setTitle('DocTranslate Usage Report')
+    pdf.setFont('Helvetica-Bold', 18)
+    pdf.drawString(50, height - 60, 'DocTranslate Usage Report')
+    pdf.setFont('Helvetica', 10)
+    pdf.drawString(50, height - 80, f'Report Period: {from_date_raw or "All time"} to {to_date_raw or "All time"}')
+    pdf.drawString(50, height - 95, f'Generated: {datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")}')
+
+    pdf.setFillColor(colors.HexColor('#0f172a'))
+    pdf.setFont('Helvetica-Bold', 12)
+    pdf.drawString(50, height - 125, 'Summary Metrics')
+    pdf.setFont('Helvetica', 10)
+    summary_y = height - 145
+    pdf.drawString(60, summary_y, f'Total translations: {stats["total_translations"]}')
+    pdf.drawString(250, summary_y, f'Total words processed: {stats["total_words"]}')
+    pdf.drawString(60, summary_y - 16, f'Average file size: {round(float(stats["avg_file_size"] or 0),1)} bytes')
+    pdf.drawString(250, summary_y - 16, f'Files translated: {len(rows)}')
+
+    pdf.setFont('Helvetica-Bold', 12)
+    pdf.drawString(50, summary_y - 50, 'Top Language Pairs')
+    pdf.setFont('Helvetica', 10)
+    y = summary_y - 70
+    for pair in pair_stats:
+        pdf.drawString(60, y, f'{pair["source_language"]} → {pair["target_language"]}: {pair["count"]}')
+        y -= 14
+
+    pdf.setFont('Helvetica-Bold', 12)
+    pdf.drawString(50, y - 10, 'Top Users')
+    pdf.setFont('Helvetica', 10)
+    y -= 30
+    for user in user_stats:
+        pdf.drawString(60, y, f'{user["username"]}: {user["count"]} translations, {user["words"]} words')
+        y -= 14
+
+    y -= 20
+    pdf.setFont('Helvetica-Bold', 12)
+    pdf.drawString(50, y, 'Daily Translation Counts')
+    y -= 18
+    pdf.setFont('Helvetica', 10)
+    for day in daily_stats:
+        pdf.drawString(60, y, f'{day["day"]}: {day["count"]}')
+        y -= 14
+
+    y -= 30
+    pdf.setFont('Helvetica-Bold', 12)
+    pdf.drawString(50, y, 'Recent Translation Activity')
+    y -= 18
+    pdf.setFont('Helvetica', 9)
+    pdf.drawString(50, y, 'Username')
+    pdf.drawString(150, y, 'File')
+    pdf.drawString(340, y, 'Words')
+    pdf.drawString(400, y, 'Engine')
+    pdf.drawString(470, y, 'Date')
+    y -= 14
+    for row in rows[:12]:
+        if y < 80:
+            pdf.showPage()
+            y = height - 60
+        pdf.drawString(50, y, str(row['username']))
+        pdf.drawString(150, y, str(row['filename'])[:25])
+        pdf.drawString(340, y, str(row['word_count']))
+        pdf.drawString(400, y, str(row['engine']))
+        pdf.drawString(470, y, str(row['translated_at'])[:10])
+        y -= 14
+
+    pdf.showPage()
+    pdf.save()
+    buffer.seek(0)
+    return send_file(buffer, mimetype='application/pdf', as_attachment=True, download_name=f"DocTranslate_Report_{datetime.utcnow().strftime('%Y%m%d')}.pdf")
 
 if __name__ == "__main__":
     # Run on port 8082 which is free from system/reserved conflicts

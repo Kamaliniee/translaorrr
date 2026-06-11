@@ -8,6 +8,14 @@ import os
 from services.glossary import apply_glossary_rules
 from deep_translator import GoogleTranslator
 
+# Load spaCy NER model safely for automatic brand/org/product detection
+nlp = None
+try:
+    import spacy
+    nlp = spacy.load("en_core_web_sm")
+except Exception as _spacy_err:
+    print(f"[translatorr] spaCy NER loading failed ({_spacy_err}); auto brand masking disabled.")
+
 # ── SSL fix for Windows corporate networks ───────────────────────────────────
 # On Windows, IT installs custom root CAs (e.g. TLS-inspection proxy certs) into
 # the Windows Certificate Store.  truststore.inject_into_ssl() makes Python's ssl
@@ -65,6 +73,16 @@ def mask_pii(text, custom_words=None):
     all_custom_words = load_properties_mask_words()
     if custom_words:
         all_custom_words.extend(custom_words)
+
+    # Automatically detect brand names, organizations, and products using spaCy NER
+    if nlp is not None:
+        try:
+            doc = nlp(text)
+            auto_detected = [ent.text for ent in doc.ents if ent.label_ in ("ORG", "PRODUCT")]
+            all_custom_words.extend(auto_detected)
+        except Exception as _ner_err:
+            print(f"[translatorr] spaCy NER brand extraction failed ({_ner_err})")
+
     # Remove duplicates, empty strings, and sort by length descending to match longest first
     all_custom_words = sorted(list(set([w for w in all_custom_words if w.strip()])), key=len, reverse=True)
 

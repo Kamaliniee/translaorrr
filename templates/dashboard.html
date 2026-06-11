@@ -145,20 +145,25 @@
       color: rgba(255,255,255,0.6);
       text-decoration: none;
       border-radius: 10px;
-      transition: all 0.15s;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
       cursor: pointer;
       background: none; border: none; width: 100%; text-align: left;
     }
-    .menu-link i { font-size: 16px; transition: color 0.15s; }
-    .menu-link:hover { color: #fff; background: rgba(255,255,255,0.05); }
+    .menu-link i { font-size: 16px; transition: color 0.25s ease; }
+    .menu-link:hover {
+      color: #fff;
+      background: rgba(255,255,255,0.08);
+      transform: translateX(4px);
+    }
     .menu-link.active {
       color: #fff;
       background: var(--primary);
       font-weight: 600;
-      box-shadow: 0 4px 12px rgba(37,99,235,0.25);
+      box-shadow: 0 4px 12px rgba(220,38,38,0.25);
+      animation: pulseSoft 2.5s infinite;
     }
     .menu-link.locked { opacity: 0.4; cursor: not-allowed; }
-    .menu-link.locked:hover { background: none; color: rgba(255,255,255,0.6); }
+    .menu-link.locked:hover { background: none; color: rgba(255,255,255,0.6); transform: none; }
     .menu-link .lock-icon { font-size: 11px; margin-left: auto; opacity: 0.6; }
 
     .sidebar-footer {
@@ -173,12 +178,13 @@
       border-radius: 10px;
       background: none; color: rgba(255,255,255,0.6);
       font-size: 13px; font-weight: 600;
-      cursor: pointer; transition: all 0.15s;
+      cursor: pointer; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .btn-signout:hover {
       background: rgba(239,68,68,0.15);
       border-color: rgba(239,68,68,0.4);
       color: #fca5a5;
+      transform: translateY(-1px);
     }
 
     /* ── Main View ── */
@@ -197,6 +203,24 @@
     .heading-title { font-size: 24px; font-weight: 800; color: var(--text); letter-spacing: -0.5px; }
     .heading-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
 
+    /* ── Animations ── */
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes pulseSoft {
+      0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+      70% { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+    }
+
     /* ── Glassmorphic Cards ── */
     .glass-card {
       background: var(--surface);
@@ -204,10 +228,14 @@
       border-radius: var(--radius);
       box-shadow: 0 4px 20px rgba(0,0,0,0.03);
       padding: 24px;
-      transition: all 0.2s ease;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       margin-bottom: 24px;
+      animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
     }
-    .glass-card:hover { box-shadow: 0 8px 30px rgba(0,0,0,0.06); }
+    .glass-card:hover {
+      box-shadow: 0 12px 30px rgba(0,0,0,0.08);
+      transform: translateY(-2px);
+    }
     .card-title {
       font-size: 15px; font-weight: 700; color: var(--text);
       display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
@@ -225,6 +253,13 @@
       flex-direction: column;
       position: relative;
       overflow: hidden;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      animation: fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+    }
+    .stat-box:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+      border-color: var(--primary-mid);
     }
     .stat-box::after {
       content: ''; position: absolute; top: 0; right: 0; width: 60px; height: 60px;
@@ -244,9 +279,14 @@
     .input-textarea, .output-box {
       width: 100%; height: 280px; border-radius: 12px; border: 1.5px solid var(--border);
       padding: 18px; font-size: 14px; line-height: 1.6; font-family: var(--font); color: var(--text);
-      resize: none; outline: none; background: #fafbfe; transition: all 0.15s;
+      resize: none; outline: none; background: #fafbfe; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    .input-textarea:focus, .output-box:focus { border-color: var(--primary); background: #fff; box-shadow: 0 0 0 4px rgba(37,99,235,0.08); }
+    .input-textarea:focus, .output-box:focus {
+      border-color: var(--primary);
+      background: #fff;
+      box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.12);
+      transform: translateY(-1px);
+    }
     
     .interactive-panel {
       width: 100%; height: 280px; border-radius: 12px; border: 1.5px solid var(--border);
@@ -254,9 +294,14 @@
     }
     .p-review-card {
       background: #fff; border: 1.5px solid var(--border); border-radius: 10px; padding: 12px;
-      transition: all 0.15s; cursor: pointer; position: relative;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; position: relative;
+      animation: fadeInUp 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
     }
-    .p-review-card:hover { border-color: var(--primary); box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+    .p-review-card:hover {
+      border-color: var(--primary);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    }
     .p-review-card.low-confidence {
       background: #fffdf5; border-color: #fde047;
     }
@@ -274,7 +319,7 @@
     .drop-zone {
       border: 2px dashed var(--border); border-radius: var(--radius);
       padding: 36px 20px; text-align: center; cursor: pointer; background: #fafcff;
-      transition: all 0.15s; margin-bottom: 16px; position: relative;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); margin-bottom: 16px; position: relative;
     }
     .drop-zone:hover, .drop-zone.drag-over { border-color: var(--primary); background: var(--primary-soft); }
     .drop-zone i { font-size: 36px; color: var(--primary); display: block; margin-bottom: 12px; }
@@ -283,14 +328,24 @@
     .btn-submit-trans {
       background: var(--primary); color: #fff; border: none; border-radius: 10px;
       padding: 12px; font-size: 14px; font-weight: 600; width: 100%; display: flex;
-      align-items: center; justify-content: center; gap: 8px; transition: all 0.15s;
+      align-items: center; justify-content: center; gap: 8px;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      cursor: pointer;
     }
-    .btn-submit-trans:hover { background: var(--primary-hover); }
+    .btn-submit-trans:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
+    }
+    .btn-submit-trans:active {
+      transform: translateY(1px);
+    }
 
     /* ── Batch Queue Rows ── */
     .batch-file-row {
       background: #f8fafc; border: 1px solid var(--border); border-radius: 10px;
       padding: 10px 16px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;
+      animation: fadeInUp 0.3s ease-out;
     }
     .batch-file-info { display: flex; align-items: center; gap: 10px; }
     .batch-file-icon { font-size: 20px; color: var(--primary); }
@@ -375,7 +430,7 @@
 <!-- ── SIDEBAR MENU ─────────────────────────────────────────── -->
 <aside class="sidebar">
   <div class="sidebar-brand">
-    <div class="brand-mark"><i class="bi bi-translate"></i></div>
+    <div class="brand-mark" style="background: none; box-shadow: none; border-radius: 0;"><img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" style="width: 38px; height: 38px; object-fit: contain;"></div>
     <span class="brand-name">DocTranslate Enterprise</span>
   </div>
 
@@ -383,7 +438,6 @@
     <div class="user-avatar">{{ username[:2].upper() }}</div>
     <div class="user-info">
       <span class="user-title">{{ username }}</span>
-      <span class="user-dept">Dept: {{ department }}</span>
       <span class="role-badge {% if role == 'admin' %}badge-admin{% elif role == 'manager' %}badge-manager{% else %}badge-staff{% endif %}">
         {{ role }}
       </span>
@@ -434,9 +488,10 @@
     </button>
     {% endif %}
 
-    <!-- Admin Only Settings -->
-    
-
+    <!-- Account Settings (All Users) -->
+    <button class="menu-link" onclick="switchTab('account')">
+      <i class="bi bi-person-gear"></i> Account Settings
+    </button>
 
   </div>
 
@@ -503,7 +558,7 @@
         </button>
       </div>
 
-      <form method="POST" enctype="multipart/form-data">
+      <form method="POST" enctype="multipart/form-data" id="translatorForm">
         <!-- Shared Controls -->
         <div class="row g-3 align-items-center mb-3">
           <div class="col-md-4">
@@ -691,63 +746,52 @@
         <h5 class="mb-0 font-bold"><i class="bi bi-bar-chart-fill text-primary"></i> Usage Analytics & Corporate Reports</h5>
         <div class="text-muted small" style="font-size: 11px;">Track engine cost allocations, department metrics, translation volume trends and audit history.</div>
       </div>
-      <div class="d-flex gap-2">
-        <a href="/analytics/export" class="btn btn-sm btn-outline-success font-bold"><i class="bi bi-file-earmark-spreadsheet"></i> Export Report (CSV)</a>
-        <button type="button" class="btn btn-sm btn-outline-primary font-bold" onclick="window.print()"><i class="bi bi-printer"></i> Export PDF / Print</button>
+      <div class="d-flex gap-2 align-items-center">
+        <input type="date" id="fromDate" class="form-control form-control-sm" placeholder="From">
+        <input type="date" id="toDate" class="form-control form-control-sm" placeholder="To">
+        <button type="button" class="btn btn-sm btn-outline-success font-bold" onclick="exportAnalytics('csv')"><i class="bi bi-file-earmark-spreadsheet"></i> Export CSV</button>
+        <button type="button" class="btn btn-sm btn-outline-primary font-bold" onclick="exportAnalytics('xlsx')"><i class="bi bi-file-earmark-spreadsheet-fill"></i> Export XLSX</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary font-bold" onclick="exportAnalytics('pdf')"><i class="bi bi-file-earmark-pdf"></i> Export PDF</button>
       </div>
     </div>
 
     <div class="row g-3 mb-4">
-      <div class="col-md-3">
+      <div class="col-md-4">
         <div class="stat-box">
           <div class="stat-label">Total translations</div>
           <div class="stat-value">{{ stat_total_translations }}</div>
-          <div class="stat-sub">Files & clipboard inputs logged</div>
+          <div class="stat-sub">Files and text translations recorded</div>
         </div>
       </div>
-      <div class="col-md-3">
+      <div class="col-md-4">
         <div class="stat-box">
           <div class="stat-label">Total words processed</div>
           <div class="stat-value">{{ stat_total_words | int }}</div>
-          <div class="stat-sub">Character volume counters</div>
+          <div class="stat-sub">Translated word volume</div>
         </div>
       </div>
-      <div class="col-md-3">
+      <div class="col-md-4">
         <div class="stat-box">
-          <div class="stat-label">Files translated</div>
-          <div class="stat-value">{{ stat_total_translations }}</div>
-          <div class="stat-sub">Uploaded documents processed</div>
-        </div>
-      </div>
-      <div class="col-md-3">
-        <div class="stat-box">
-          <div class="stat-label">Average Confidence</div>
-          <div class="stat-value text-success">{{ stat_avg_confidence }}%</div>
-          <div class="stat-sub">Translation accuracy benchmark</div>
+          <div class="stat-label">Average file size</div>
+          <div class="stat-value">{{ stat_avg_file_size }} KB</div>
+          <div class="stat-sub">Average uploaded document size</div>
         </div>
       </div>
     </div>
 
     <div class="row g-3 mb-4">
-      <div class="col-md-4">
+      <div class="col-md-6">
         <div class="stat-box">
-          <div class="stat-label">Most active department</div>
-          <div class="stat-value text-primary" style="font-size: 22px;">{{ stat_active_dept }}</div>
-          <div class="stat-sub">Highest translation volume</div>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="stat-box">
-          <div class="stat-label">Common direction</div>
+          <div class="stat-label">Common translation direction</div>
           <div class="stat-value text-info" style="font-size: 22px;">{{ stat_common_dir }}</div>
           <div class="stat-sub">Most frequent language pair</div>
         </div>
       </div>
-      <div class="col-md-4">
+      <div class="col-md-6">
         <div class="stat-box">
-          <div class="stat-label">Avg file size</div>
-          <div class="stat-value" style="font-size: 22px;">{{ stat_avg_file_size }} KB</div>
-          <div class="stat-sub">Average parsed document size</div>
+          <div class="stat-label">Files translated</div>
+          <div class="stat-value" style="font-size: 22px;">{{ stat_total_translations }}</div>
+          <div class="stat-sub">Total translation jobs recorded</div>
         </div>
       </div>
     </div>
@@ -761,8 +805,8 @@
       </div>
       <div class="col-md-6">
         <div class="glass-card">
-          <div class="card-title"><i class="bi bi-pie-chart"></i> Department Cost Allocations</div>
-          <canvas id="deptChart" style="max-height: 250px;"></canvas>
+          <div class="card-title"><i class="bi bi-bar-chart-steps"></i> Language Pair Statistics</div>
+          <canvas id="langPairChart" style="max-height: 250px;"></canvas>
         </div>
       </div>
     </div>
@@ -832,30 +876,35 @@
         <div class="glass-card">
           <div class="card-title"><i class="bi bi-person-plus"></i> Register Employee Profile</div>
           
-          <form method="POST" action="/manage-users/add">
+          <form method="POST" action="/manage-users/add" id="addUserForm">
+            {% if user_error %}
+              <div class="alert alert-danger p-2 small mb-3"><i class="bi bi-exclamation-triangle"></i> {{ user_error }}</div>
+            {% endif %}
+            {% if user_success %}
+              <div class="alert alert-success p-2 small mb-3"><i class="bi bi-check-circle"></i> {{ user_success }}</div>
+            {% endif %}
             <div class="mb-3">
               <label class="form-label small font-bold">Username</label>
               <input type="text" name="new_username" class="form-control" placeholder="john.doe" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label small font-bold">Full Name</label>
+              <input type="text" name="new_full_name" class="form-control" placeholder="John Doe">
             </div>
             <div class="mb-3">
               <label class="form-label small font-bold">Email address</label>
               <input type="email" name="new_email" class="form-control" placeholder="john.doe@company.com" required>
             </div>
             <div class="mb-3">
-              <label class="form-label small font-bold">Department</label>
-              <select name="new_dept" class="form-select">
-                <option value="Engineering">Engineering</option>
-                <option value="Sales">Sales</option>
-                <option value="HR">HR / Compliance</option>
-                <option value="Legal">Legal</option>
-                <option value="Operations">Operations</option>
-              </select>
+              <label class="form-label small font-bold">Initial Password</label>
+              <input type="text" name="new_password" class="form-control" placeholder="password123" value="password123">
             </div>
             <div class="mb-3">
               <label class="form-label small font-bold">Role Profile</label>
               <select name="new_role" class="form-select">
-                <option value="staff">Regular Staff (Translate only)</option>
-                <option value="manager">Department Manager (Team logs)</option>
+                <option value="guest">Guest (View only)</option>
+                <option value="staff">Staff (Translate only)</option>
+                <option value="manager">Manager (Team logs)</option>
                 <option value="admin">System Admin (Full rights)</option>
               </select>
             </div>
@@ -874,10 +923,11 @@
               <thead class="table-light">
                 <tr>
                   <th>Username</th>
+                  <th>Full Name</th>
                   <th>Email</th>
-                  <th>Department</th>
                   <th>System Role</th>
-                  <th class="text-center">Action</th>
+                  <th>Status</th>
+                  <th class="text-center">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -885,18 +935,30 @@
                   {% for u in users %}
                   <tr>
                     <td><strong>{{ u.username }}</strong></td>
+                    <td>{{ u.full_name or '-' }}</td>
                     <td>{{ u.email }}</td>
-                    <td><span class="badge bg-light text-dark">{{ u.department }}</span></td>
                     <td>
                       <span class="role-badge {% if u.role == 'admin' %}badge-admin{% elif u.role == 'manager' %}badge-manager{% else %}badge-staff{% endif %}">
                         {{ u.role }}
                       </span>
                     </td>
+                    <td>
+                      <span class="badge {% if u.active %}bg-success{% else %}bg-secondary{% endif %}" style="font-size:10px;">
+                        {{ 'Active' if u.active else 'Inactive' }}
+                      </span>
+                    </td>
                     <td class="text-center">
                       {% if u.username != username %}
-                      <form method="POST" action="/manage-users/delete/{{ u.id }}" style="display:inline;">
-                        <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove user profile?')"><i class="bi bi-trash"></i></button>
-                      </form>
+                      <div class="d-flex gap-1 justify-content-center">
+                        <button type="button" class="btn btn-sm btn-outline-primary"
+                          onclick="openEditRoleModal({{ u.id }}, '{{ u.username }}', '{{ u.role }}')"
+                          title="Edit Role">
+                          <i class="bi bi-pencil"></i> Role
+                        </button>
+                        <form method="POST" action="/manage-users/delete/{{ u.id }}" style="display:inline;">
+                          <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove user profile?')"><i class="bi bi-trash"></i></button>
+                        </form>
+                      </div>
                       {% else %}
                       <span class="text-muted small">Current User</span>
                       {% endif %}
@@ -904,7 +966,7 @@
                   </tr>
                   {% endfor %}
                 {% else %}
-                  <tr><td colspan="5" class="text-center text-muted p-4">No users found. Add one on the left.</td></tr>
+                  <tr><td colspan="6" class="text-center text-muted p-4">No users found. Add one on the left.</td></tr>
                 {% endif %}
               </tbody>
             </table>
@@ -985,6 +1047,117 @@
     </div>
   </div>
 
+  <!-- ── 8. ACCOUNT SETTINGS TAB ──────────────────────────── -->
+  <div id="tab-account" class="tab-pane">
+    <div class="glass-card" style="max-width: 600px;">
+      <div class="card-title"><i class="bi bi-person-gear"></i> Account Settings</div>
+      <p class="text-muted small">Manage your personal details and secure your account.</p>
+      
+      <hr>
+
+      <form method="POST" action="/account/update" id="accountSettingsForm" onsubmit="return validateAccountForm()">
+        {% if account_error %}
+          <div class="alert alert-danger p-2 small mb-3 alert-dismissible fade show">
+            <i class="bi bi-exclamation-triangle-fill"></i> {{ account_error }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+        {% endif %}
+        {% if account_success %}
+          <div class="alert alert-success p-2 small mb-3 alert-dismissible fade show">
+            <i class="bi bi-check-circle-fill"></i> {{ account_success }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+        {% endif %}
+
+        <div class="mb-3">
+          <label class="form-label small font-bold">Username</label>
+          <input type="text" name="username" class="form-control" value="{{ current_user.username }}" required>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label small font-bold">Full Name</label>
+          <input type="text" name="full_name" class="form-control" value="{{ current_user.full_name or '' }}" required>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label small font-bold">Email address</label>
+          <input type="email" name="email" class="form-control" value="{{ current_user.email }}" required>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label small font-bold">System Role Profile</label>
+          <input type="text" class="form-control bg-light" value="{{ current_user.role.upper() }}" readonly>
+          <div class="form-text small" style="font-size:10px;">Your role profile is managed by the system administrator.</div>
+        </div>
+
+        <hr style="border-color: var(--border); margin: 20px 0;">
+        <div style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:14px;">Change Password</div>
+
+        <div class="mb-3">
+          <label class="form-label small font-bold" for="current_password_field">Current Password <span class="text-danger">*</span></label>
+          <input type="password" name="current_password" id="current_password_field" class="form-control" placeholder="Enter your current password">
+          <div class="form-text small" style="font-size:10px;">Required if you want to change your password.</div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label small font-bold" for="new_password_field">New Password</label>
+          <input type="password" name="password" id="new_password_field" class="form-control" placeholder="Enter new password (min 8 chars)" oninput="onNewPasswordInput()">
+          <div id="new_password_hint" class="form-text small" style="font-size:10px;">Leave blank to keep your current password.</div>
+        </div>
+
+        <div id="account_form_error" class="alert alert-danger p-2 small mb-3" style="display:none;">
+          <i class="bi bi-exclamation-triangle-fill"></i> <span id="account_form_error_msg"></span>
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100 font-bold" id="accountSaveBtn"><i class="bi bi-shield-lock"></i> Save Changes</button>
+      </form>
+
+      <script>
+        function onNewPasswordInput() {
+          const newPw = document.getElementById('new_password_field').value;
+          const currentPwField = document.getElementById('current_password_field');
+          const hint = document.getElementById('new_password_hint');
+          if (newPw.length > 0) {
+            currentPwField.setAttribute('required', 'required');
+            currentPwField.style.borderColor = 'var(--primary)';
+            currentPwField.style.boxShadow = '0 0 0 3px rgba(220,38,38,0.12)';
+            hint.innerHTML = '<span style="color:var(--danger); font-weight:600;">⚠️ You must enter your current password above to set a new one.</span>';
+          } else {
+            currentPwField.removeAttribute('required');
+            currentPwField.style.borderColor = '';
+            currentPwField.style.boxShadow = '';
+            hint.innerHTML = 'Leave blank to keep your current password.';
+          }
+        }
+
+        function validateAccountForm() {
+          const newPw = document.getElementById('new_password_field').value;
+          const currentPw = document.getElementById('current_password_field').value;
+          const errDiv = document.getElementById('account_form_error');
+          const errMsg = document.getElementById('account_form_error_msg');
+
+          errDiv.style.display = 'none';
+
+          if (newPw.length > 0 && currentPw.length === 0) {
+            errMsg.textContent = 'You must enter your current password before setting a new one.';
+            errDiv.style.display = 'block';
+            document.getElementById('current_password_field').focus();
+            return false;
+          }
+
+          if (newPw.length > 0 && newPw.length < 8) {
+            errMsg.textContent = 'New password must be at least 8 characters long.';
+            errDiv.style.display = 'block';
+            document.getElementById('new_password_field').focus();
+            return false;
+          }
+
+          return true;
+        }
+      </script>
+    </div>
+  </div>
+
           </div>
         </div>
 
@@ -996,10 +1169,46 @@
 
 </main>
 
-
+<!-- ── EDIT ROLE MODAL ──────────────────────────────────────── -->
+<div class="modal fade" id="editRoleModal" tabindex="-1" aria-labelledby="editRoleModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.15);">
+      <div class="modal-header" style="background: linear-gradient(135deg, #0f172a, #1e293b); border-radius: 16px 16px 0 0; border: none;">
+        <h5 class="modal-title text-white" id="editRoleModalLabel"><i class="bi bi-person-gear"></i> Edit User Role</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" id="editRoleForm" action="/manage-users/update-role/0">
+        <div class="modal-body p-4">
+          <div class="text-center mb-3">
+            <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#dc2626,#ef4444);display:inline-flex;align-items:center;justify-content:center;margin-bottom:8px;">
+              <i class="bi bi-person" style="color:white;font-size:22px;"></i>
+            </div>
+            <div class="fw-bold" id="modalUsername" style="font-size:15px;"></div>
+            <div class="text-muted small">Current role: <strong id="modalCurrentRole"></strong></div>
+          </div>
+          <label class="form-label small fw-bold text-muted text-uppercase" style="letter-spacing:.5px;">Assign New Role</label>
+          <select name="new_role" id="modalRoleSelect" class="form-select form-select-lg" style="border-radius:10px;">
+            <option value="guest">👤 Guest — View only</option>
+            <option value="staff">🧑‍💼 Staff — Translate only</option>
+            <option value="manager">👔 Manager — Team logs &amp; analytics</option>
+            <option value="admin">🔑 Admin — Full system access</option>
+          </select>
+          <div class="mt-3 p-2 rounded-3 small" style="background:#f8fafc;border:1px solid #e2e8f0;">
+            <i class="bi bi-info-circle text-primary"></i> Only admins can change user roles. Changes take effect immediately on next login.
+          </div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary fw-bold"><i class="bi bi-check-circle"></i> Update Role</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 
 <!-- Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
 
 <script>
   // Notification System
@@ -1180,7 +1389,33 @@
     alert('Translation copied to clipboard!');
   }
 
+  // --- Export Analytics with date range ---
+  function exportAnalytics(format) {
+    const fromDate = document.getElementById('fromDate').value;
+    const toDate = document.getElementById('toDate').value;
+    if (format === 'pdf') {
+      let url = `/analytics/export/pdf?`;
+      if (fromDate) url += `from_date=${fromDate}&`;
+      if (toDate) url += `to_date=${toDate}`;
+      window.location.href = url;
+    } else {
+      let url = `/analytics/export?format=${format}`;
+      if (fromDate) url += `&from_date=${fromDate}`;
+      if (toDate) url += `&to_date=${toDate}`;
+      window.location.href = url;
+    }
+  }
 
+  // --- Edit Role Modal ---
+  function openEditRoleModal(userId, username, currentRole) {
+    document.getElementById('editRoleForm').action = `/manage-users/update-role/${userId}`;
+    document.getElementById('modalUsername').textContent = username;
+    document.getElementById('modalCurrentRole').textContent = currentRole.charAt(0).toUpperCase() + currentRole.slice(1);
+    const sel = document.getElementById('modalRoleSelect');
+    if (sel) sel.value = currentRole;
+    const modal = new bootstrap.Modal(document.getElementById('editRoleModal'));
+    modal.show();
+  }
 
   // Refresh and load audits via JSON API
   function refreshAuditLogs() {
@@ -1492,27 +1727,33 @@
       });
     }
 
-    // B. Department Cost Chart
-    const deptCtx = document.getElementById('deptChart');
-    if (deptCtx) {
-      new Chart(deptCtx, {
-        type: 'doughnut',
+    // B. Language Pair Statistics Chart
+    const langPairCtx = document.getElementById('langPairChart');
+    if (langPairCtx) {
+      new Chart(langPairCtx, {
+        type: 'bar',
         data: {
           labels: [
-            {% for row in department_stats %}
-              "{{ row.department }}",
+            {% for row in language_pair_stats %}
+              "{{ row.pair }}",
             {% endfor %}
           ],
           datasets: [{
+            label: 'Translations',
             data: [
-              {% for row in department_stats %}
-                {{ row.words }},
+              {% for row in language_pair_stats %}
+                {{ row.count }},
               {% endfor %}
             ],
-            backgroundColor: ['#dc2626', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+            backgroundColor: ['#dc2626', '#ef4444', '#f87171', '#fca5a5', '#fecaca'],
+            borderRadius: 6
           }]
         },
-        options: { responsive: true }
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+        }
       });
     }
 
@@ -1584,6 +1825,175 @@
         };
       }
     {% endif %}
+  });
+
+</script>
+
+<!-- ══ BLANK INPUT VALIDATION — FIXED TOAST ══════════════════════ -->
+<style>
+  #blankInputToast {
+    position: fixed;
+    top: 22px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-120px);
+    z-index: 99999;
+    background: #dc2626;
+    color: #fff;
+    padding: 14px 24px 14px 18px;
+    border-radius: 14px;
+    font-family: 'Inter', 'Sora', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 8px 32px rgba(220,38,38,0.35);
+    min-width: 300px;
+    max-width: 520px;
+    transition: transform 0.35s cubic-bezier(.34,1.56,.64,1), opacity 0.3s;
+    opacity: 0;
+    pointer-events: none;
+  }
+  #blankInputToast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  #blankInputToast .toast-icon { font-size: 20px; flex-shrink: 0; }
+  #blankInputToast .toast-close {
+    margin-left: auto;
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: #fff;
+    border-radius: 6px;
+    width: 24px; height: 24px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  #blankInputToast .toast-close:hover { background: rgba(255,255,255,0.35); }
+</style>
+
+<div id="blankInputToast">
+  <span class="toast-icon"><i class="bi bi-exclamation-triangle-fill"></i></span>
+  <span id="blankInputToastMsg">Inputs are blank — cannot process.</span>
+  <button class="toast-close" onclick="hideBlankToast()" title="Close">✕</button>
+</div>
+
+<script>
+  // ── GLOBAL TOAST HELPERS ─────────────────────────────────────
+  var _blankToastTimer = null;
+
+  function showBlankToast(message) {
+    var toast = document.getElementById('blankInputToast');
+    var msg   = document.getElementById('blankInputToastMsg');
+    if (!toast || !msg) return;
+    msg.textContent = message;
+    toast.classList.add('show');
+    clearTimeout(_blankToastTimer);
+    _blankToastTimer = setTimeout(hideBlankToast, 5000);
+  }
+
+  function hideBlankToast() {
+    var toast = document.getElementById('blankInputToast');
+    if (toast) toast.classList.remove('show');
+    clearTimeout(_blankToastTimer);
+  }
+
+  // ── TEXT TRANSLATION / DOCUMENT UPLOAD FORM ─────────────────
+  function validateTranslatorForm(e) {
+    var textTab = document.getElementById('translator-tab-text');
+    var isText  = textTab && textTab.style.display !== 'none';
+
+    if (isText) {
+      var txt = document.querySelector('#translatorForm [name="raw_text"]');
+      if (!txt || txt.value.trim() === '') {
+        showBlankToast('⚠ Inputs are blank — cannot process. Please enter text to translate.');
+        if (txt) txt.focus();
+        return false;
+      }
+    } else {
+      var fileInput = document.getElementById('mainFileInput');
+      if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        showBlankToast('⚠ Inputs are blank — cannot process. Please select a document file to upload.');
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // ── REGISTER EMPLOYEE (ADD USER) FORM ───────────────────────
+  function validateAddUserForm() {
+    var username = document.querySelector('#addUserForm [name="new_username"]');
+    var email    = document.querySelector('#addUserForm [name="new_email"]');
+
+    if (!username || username.value.trim() === '') {
+      showBlankToast('⚠ Inputs are blank — cannot process. Username is required.');
+      if (username) username.focus();
+      return false;
+    }
+    if (!email || email.value.trim() === '') {
+      showBlankToast('⚠ Inputs are blank — cannot process. Email address is required.');
+      if (email) email.focus();
+      return false;
+    }
+    return true;
+  }
+  // ── WIRE UP FORM LISTENERS — runs after DOM loads ────────────
+  document.addEventListener('DOMContentLoaded', function() {
+
+    // Translator form (text translation + document upload)
+    var tForm = document.getElementById('translatorForm');
+    if (tForm) {
+      tForm.addEventListener('submit', function(e) {
+        var textTab = document.getElementById('translator-tab-text');
+        var isText  = textTab && textTab.style.display !== 'none';
+
+        if (isText) {
+          var txt = tForm.querySelector('[name="raw_text"]');
+          if (!txt || txt.value.trim() === '') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            showBlankToast('Inputs are blank — cannot process. Please enter text to translate.');
+            if (txt) txt.focus();
+            return false;
+          }
+        } else {
+          var fileInput = document.getElementById('mainFileInput');
+          if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            showBlankToast('Inputs are blank — cannot process. Please select a document file to upload.');
+            return false;
+          }
+        }
+      });
+    }
+
+    // Add User form
+    var aForm = document.getElementById('addUserForm');
+    if (aForm) {
+      aForm.addEventListener('submit', function(e) {
+        var username = aForm.querySelector('[name="new_username"]');
+        var email    = aForm.querySelector('[name="new_email"]');
+        if (!username || username.value.trim() === '') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          showBlankToast('Inputs are blank — cannot process. Username is required.');
+          if (username) username.focus();
+          return false;
+        }
+        if (!email || email.value.trim() === '') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          showBlankToast('Inputs are blank — cannot process. Email address is required.');
+          if (email) email.focus();
+          return false;
+        }
+      });
+    }
+
   });
 </script>
 

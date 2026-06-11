@@ -7,3 +7,6 @@ requests
 PyPDF2
 pymysql
 truststore
+reportlab
+Werkzeug
+spacy

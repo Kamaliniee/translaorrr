@@ -54,3 +54,38 @@ def export_audit_csv(conn, search=None, user_filter=None, action_filter=None):
         writer.writerow([log['timestamp'], log['username'], log['action'], log['details']])
         
     return output.getvalue()
+
+
+def log_login_event(conn, user_id, username, email, role, ip_address, login_time, logout_time, status, details=None):
+    """Write a login audit entry to the login_audit table."""
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO login_audit
+            (user_id, username, email, role, ip_address, login_time, logout_time, status, details)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (user_id, username, email, role, ip_address, login_time, logout_time, status, details)
+        )
+        conn.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"Login audit log failed: {e}")
+        return None
+
+
+def get_login_audit_logs(conn, user_filter=None, status_filter=None, limit=1000):
+    query = "SELECT id, user_id, username, email, role, ip_address, login_time, logout_time, status, details, created_at FROM login_audit WHERE 1=1"
+    params = []
+    if user_filter:
+        query += " AND username = %s"
+        params.append(user_filter)
+    if status_filter:
+        query += " AND status = %s"
+        params.append(status_filter)
+    query += " ORDER BY id DESC LIMIT %s"
+    params.append(limit)
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    return cursor.fetchall()

@@ -91,8 +91,8 @@
 </head>
 <body>
 <div class="auth-card">
-  <input type="radio" name="auth-tab" id="tab-si" checked>
-  <input type="radio" name="auth-tab" id="tab-su">
+  <input type="radio" name="auth-tab" id="tab-si" {% if active_tab != 'register' %}checked{% endif %}>
+  <input type="radio" name="auth-tab" id="tab-su" {% if active_tab == 'register' %}checked{% endif %}>
 
   <div class="auth-header">
     <div class="d-flex align-items-center gap-2 mb-3">
@@ -107,7 +107,7 @@
 
   <div class="auth-body">
     <div class="screen" id="si-screen">
-      <form method="POST" action="{{ url_for('login') }}">
+      <form method="POST" action="{{ url_for('login') }}" id="signinForm" onsubmit="return validateSigninForm()">
         <div class="mb-3">
           <label class="f-label">Email address</label>
           <input type="email" name="username" class="form-control" placeholder="you@company.com" required>
@@ -123,36 +123,11 @@
           </div>
           <button class="forgot-btn" type="button">Forgot password?</button>
         </div>
-        <label class="f-label">Sign in as</label>
-        <div class="role-grid">
-          <input type="radio" name="role" id="si-role-admin" value="admin" checked>
-          <label class="role-chip" for="si-role-admin">
-            <div class="role-chip-icon"><i class="bi bi-shield-check"></i></div>
-            <div class="role-chip-name">Admin</div>
-            <div class="role-chip-perm">Full access</div>
-          </label>
-
-          <input type="radio" name="role" id="si-role-manager" value="manager">
-          <label class="role-chip" for="si-role-manager">
-            <div class="role-chip-icon"><i class="bi bi-people"></i></div>
-            <div class="role-chip-name">Manager</div>
-            <div class="role-chip-perm">Team access</div>
-          </label>
-
-          <input type="radio" name="role" id="si-role-staff" value="staff">
-          <label class="role-chip" for="si-role-staff">
-            <div class="role-chip-icon"><i class="bi bi-person"></i></div>
-            <div class="role-chip-name">Staff</div>
-            <div class="role-chip-perm">Translate only</div>
-          </label>
- 
-          <input type="radio" name="role" id="si-role-guest" value="guest">
-          <label class="role-chip" for="si-role-guest">
-            <div class="role-chip-icon"><i class="bi bi-incognito"></i></div>
-            <div class="role-chip-name">Guest</div>
-            <div class="role-chip-perm">Sandbox</div>
-          </label>
-        </div>
+        {% if error and active_tab != 'register' %}
+        <div class="alert alert-danger py-2 mb-3" id="signinErrorBox">{{ error }}</div>
+        {% else %}
+        <div class="alert alert-danger py-2 mb-3" id="signinErrorBox" style="display:none;"></div>
+        {% endif %}
         <button type="submit" class="btn-submit">Sign in <i class="bi bi-arrow-right"></i></button>
       </form>
       <div class="or-div"><hr><span>or continue with</span><hr></div>
@@ -163,52 +138,37 @@
     </div>
 
     <div class="screen" id="su-screen">
-      <div class="row g-3">
-        <div class="col-12">
-          <label class="f-label">Full name</label>
-          <input type="text" class="form-control" placeholder="Jane Smith">
+      <form method="POST" action="{{ url_for('register') }}" id="registerForm" onsubmit="return validateRegisterForm()">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="f-label">Username</label>
+            <input type="text" name="username" class="form-control" placeholder="jane.smith" required>
+          </div>
+          <div class="col-12">
+            <label class="f-label">Full Name</label>
+            <input type="text" name="full_name" class="form-control" placeholder="Jane Smith" required>
+          </div>
+          <div class="col-12">
+            <label class="f-label">Email address</label>
+            <input type="email" name="email" class="form-control" placeholder="you@company.com" required>
+          </div>
+          <div class="col-12">
+            <label class="f-label">Password</label>
+            <input type="password" name="password" class="form-control" placeholder="••••••••" required>
+          </div>
+          <div class="col-12">
+            <label class="f-label">Confirm password</label>
+            <input type="password" name="confirm_password" class="form-control" placeholder="••••••••" required>
+          </div>
         </div>
-        <div class="col-12">
-          <label class="f-label">Work email</label>
-          <input type="email" class="form-control" placeholder="you@company.com">
-        </div>
-        <div class="col-12">
-          <label class="f-label">Password</label>
-          <input type="password" class="form-control" placeholder="••••••••">
-        </div>
-        <div class="col-12">
-          <label class="f-label">Confirm password</label>
-          <input type="password" class="form-control" placeholder="••••••••">
-        </div>
-      </div>
-      <label class="f-label mt-3 d-block">Your role</label>
-      <div class="role-grid">
-        <input type="radio" name="su-role" id="su-role-admin" checked>
-        <label class="role-chip" for="su-role-admin">
-          <div class="role-chip-icon"><i class="bi bi-shield-check"></i></div>
-          <div class="role-chip-name">Admin</div>
-          <div class="role-chip-perm">Full access</div>
-        </label>
-
-        <input type="radio" name="su-role" id="su-role-manager">
-        <label class="role-chip" for="su-role-manager">
-          <div class="role-chip-icon"><i class="bi bi-people"></i></div>
-          <div class="role-chip-name">Manager</div>
-          <div class="role-chip-perm">Team access</div>
-        </label>
-
-        <input type="radio" name="su-role" id="su-role-staff">
-        <label class="role-chip" for="su-role-staff">
-          <div class="role-chip-icon"><i class="bi bi-person"></i></div>
-          <div class="role-chip-name">Staff</div>
-          <div class="role-chip-perm">Translate only</div>
-        </label>
-      </div>
-      <div class="form-check mb-3">
-        <input class="form-check-input" type="checkbox" id="su-agree">
-        <label class="form-check-label" for="su-agree">I agree to the <a href="#" style="color:var(--accent);text-decoration:none;">Terms</a> and <a href="#" style="color:var(--accent);text-decoration:none;">Privacy Policy</a></label>
-      </div>
-      <button type="button" class="btn-submit">Create account <i class="bi bi-arrow-right"></i></button>
+        {% if error and active_tab == 'register' %}
+        <div class="alert alert-danger py-2 mt-3" id="registerErrorBox">{{ error }}</div>
+        {% else %}
+        <div class="alert alert-danger py-2 mt-3" id="registerErrorBox" style="display:none;"></div>
+        {% endif %}
+        <div class="form-text text-muted small mb-3">New accounts are created as Guest by default. Admins can update roles later.</div>
+        <button type="submit" class="btn-submit">Create account <i class="bi bi-arrow-right"></i></button>
+      </form>
       <div class="or-div"><hr><span>or continue with</span><hr></div>
       <div class="row g-2">
         <div class="col-6"><button type="button" class="social-btn"><i class="bi bi-google"></i> Google</button></div>
@@ -248,6 +208,118 @@ document.addEventListener('DOMContentLoaded', function() {
     radio.addEventListener('change', updateCredentials);
   });
 });
+</script>
+
+<!-- ══ BLANK INPUT VALIDATION TOAST ══════════════════════════ -->
+<style>
+  #loginBlankToast {
+    position: fixed;
+    top: 22px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-120px);
+    z-index: 99999;
+    background: #dc2626;
+    color: #fff;
+    padding: 14px 24px 14px 18px;
+    border-radius: 14px;
+    font-family: 'Sora', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 8px 32px rgba(220,38,38,0.35);
+    min-width: 300px;
+    max-width: 520px;
+    transition: transform 0.35s cubic-bezier(.34,1.56,.64,1), opacity 0.3s;
+    opacity: 0;
+    pointer-events: none;
+  }
+  #loginBlankToast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  #loginBlankToast .ltoast-close {
+    margin-left: auto;
+    background: rgba(255,255,255,0.2);
+    border: none; color: #fff;
+    border-radius: 6px;
+    width: 24px; height: 24px;
+    cursor: pointer; font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #loginBlankToast .ltoast-close:hover { background: rgba(255,255,255,0.35); }
+</style>
+
+<div id="loginBlankToast">
+  <span style="font-size:20px;flex-shrink:0;"><i class="bi bi-exclamation-triangle-fill"></i></span>
+  <span id="loginBlankToastMsg">Inputs are blank — cannot process.</span>
+  <button class="ltoast-close" onclick="hideLoginToast()" title="Close">✕</button>
+</div>
+
+<script>
+  var _loginToastTimer = null;
+
+  function showLoginToast(message) {
+    var toast = document.getElementById('loginBlankToast');
+    var msg   = document.getElementById('loginBlankToastMsg');
+    if (!toast || !msg) return;
+    msg.textContent = message;
+    toast.classList.add('show');
+    clearTimeout(_loginToastTimer);
+    _loginToastTimer = setTimeout(hideLoginToast, 5000);
+  }
+
+  function hideLoginToast() {
+    var toast = document.getElementById('loginBlankToast');
+    if (toast) toast.classList.remove('show');
+    clearTimeout(_loginToastTimer);
+  }
+
+  // ── SIGN IN FORM VALIDATION ───────────────────────────────────
+  function validateSigninForm() {
+    var u = document.querySelector('#si-screen input[name="username"]');
+    var p = document.querySelector('#si-screen input[name="password"]');
+    if (!u || u.value.trim() === '') {
+      showLoginToast('Inputs are blank — cannot process. Please enter your email.');
+      if (u) u.focus();
+      return false;
+    }
+    if (!p || p.value.trim() === '') {
+      showLoginToast('Inputs are blank — cannot process. Please enter your password.');
+      if (p) p.focus();
+      return false;
+    }
+    return true;
+  }
+
+  // ── REGISTER FORM VALIDATION ──────────────────────────────────
+  function validateRegisterForm() {
+    var fields = [
+      { sel: '#su-screen input[name="username"]',         label: 'Username' },
+      { sel: '#su-screen input[name="full_name"]',        label: 'Full Name' },
+      { sel: '#su-screen input[name="email"]',            label: 'Email address' },
+      { sel: '#su-screen input[name="password"]',         label: 'Password' },
+      { sel: '#su-screen input[name="confirm_password"]', label: 'Confirm Password' },
+    ];
+    for (var i = 0; i < fields.length; i++) {
+      var el = document.querySelector(fields[i].sel);
+      if (!el || el.value.trim() === '') {
+        showLoginToast('Inputs are blank — cannot process. ' + fields[i].label + ' is required.');
+        if (el) el.focus();
+        return false;
+      }
+    }
+    var pw  = document.querySelector('#su-screen input[name="password"]');
+    var cpw = document.querySelector('#su-screen input[name="confirm_password"]');
+    if (pw && cpw && pw.value !== cpw.value) {
+      showLoginToast('Passwords do not match — cannot process.');
+      if (cpw) cpw.focus();
+      return false;
+    }
+    return true;
+  }
 </script>
 </body>
 </html>
