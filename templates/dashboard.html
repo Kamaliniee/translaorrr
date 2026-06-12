@@ -429,9 +429,8 @@
 
 <!-- ── SIDEBAR MENU ─────────────────────────────────────────── -->
 <aside class="sidebar">
-  <div class="sidebar-brand">
-    <div class="brand-mark" style="background: none; box-shadow: none; border-radius: 0;"><img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" style="width: 38px; height: 38px; object-fit: contain;"></div>
-    <span class="brand-name">DocTranslate Enterprise</span>
+  <div style="background: #ffffff; border-bottom: 2px solid rgba(0,0,0,0.10); padding: 14px; width: 100%; box-sizing: border-box; overflow: hidden; flex-shrink: 0;">
+    <img src="{{ url_for('static', filename='prodapt_logo.png') }}" alt="Prodapt Logo" style="width: 100%; height: auto; display: block;">
   </div>
 
   <div class="user-pill">
@@ -750,6 +749,7 @@
         <input type="date" id="fromDate" class="form-control form-control-sm" placeholder="From">
         <input type="date" id="toDate" class="form-control form-control-sm" placeholder="To">
         <button type="button" class="btn btn-sm btn-outline-success font-bold" onclick="exportAnalytics('csv')"><i class="bi bi-file-earmark-spreadsheet"></i> Export CSV</button>
+        <button type="button" class="btn btn-sm btn-outline-info font-bold" onclick="exportAnalytics('txt')"><i class="bi bi-file-earmark-text"></i> Export TXT</button>
         <button type="button" class="btn btn-sm btn-outline-primary font-bold" onclick="exportAnalytics('xlsx')"><i class="bi bi-file-earmark-spreadsheet-fill"></i> Export XLSX</button>
         <button type="button" class="btn btn-sm btn-outline-secondary font-bold" onclick="exportAnalytics('pdf')"><i class="bi bi-file-earmark-pdf"></i> Export PDF</button>
       </div>
@@ -810,6 +810,28 @@
         </div>
       </div>
     </div>
+
+    {% if role == 'admin' %}
+    <!-- Archive Old Records Card -->
+    <div class="glass-card mt-4 mb-4">
+      <div class="card-title text-warning"><i class="bi bi-archive-fill"></i> Data Retention Archiving Policy</div>
+      <p class="text-muted small">Move detailed translation history records older than your configured retention policy limit to the long-term history archive.</p>
+      
+      {% if session.get('archive_msg') %}
+        <div class="alert alert-warning p-2 small mb-3 alert-dismissible fade show">
+          <i class="bi bi-info-circle-fill"></i> {{ session.pop('archive_msg') }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      {% endif %}
+
+      <form method="POST" action="/admin/archive-old-translations" class="d-flex align-items-center gap-3">
+        <div>
+          Current policy is set to archive records older than <strong>{{ app_settings.get('RETENTION_MONTHS', '12') }} months</strong>.
+        </div>
+        <button type="submit" class="btn btn-sm btn-outline-warning font-bold ms-auto" onclick="return confirm('Archive records older than retention threshold now?')"><i class="bi bi-archive"></i> Archive Old Records Now</button>
+      </form>
+    </div>
+    {% endif %}
   </div>
 
   <!-- ── 5. SYSTEM AUDIT LOGS TAB ─────────────────────────── -->
@@ -869,6 +891,12 @@
 
   <!-- ── 6. MANAGE USERS TAB (ADMIN ONLY) ────────────────── -->
   <div id="tab-users" class="tab-pane">
+    {% if session.get('pw_error') %}
+      <div class="alert alert-danger p-2 small mb-3"><i class="bi bi-exclamation-triangle-fill"></i> {{ session.pop('pw_error') }}</div>
+    {% endif %}
+    {% if session.get('pw_success') %}
+      <div class="alert alert-success p-2 small mb-3"><i class="bi bi-check-circle-fill"></i> {{ session.pop('pw_success') }}</div>
+    {% endif %}
     <div class="row g-3">
       
       <!-- Add User Card -->
@@ -902,7 +930,6 @@
             <div class="mb-3">
               <label class="form-label small font-bold">Role Profile</label>
               <select name="new_role" class="form-select">
-                <option value="guest">Guest (View only)</option>
                 <option value="staff">Staff (Translate only)</option>
                 <option value="manager">Manager (Team logs)</option>
                 <option value="admin">System Admin (Full rights)</option>
@@ -954,6 +981,11 @@
                           onclick="openEditRoleModal({{ u.id }}, '{{ u.username }}', '{{ u.role }}')"
                           title="Edit Role">
                           <i class="bi bi-pencil"></i> Role
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-warning"
+                          onclick="openChangePasswordModal({{ u.id }}, '{{ u.username }}')"
+                          title="Change Password">
+                          <i class="bi bi-key"></i> Password
                         </button>
                         <form method="POST" action="/manage-users/delete/{{ u.id }}" style="display:inline;">
                           <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove user profile?')"><i class="bi bi-trash"></i></button>
@@ -1156,15 +1188,62 @@
         }
       </script>
     </div>
-  </div>
 
-          </div>
+    {% if role == 'admin' %}
+    <!-- Admin Config Settings Card -->
+    <div class="glass-card mt-4" style="max-width: 600px;">
+      <div class="card-title"><i class="bi bi-gear-wide-connected"></i> System Configuration Settings</div>
+      <p class="text-muted small">Update enterprise limits and dynamic company branding settings.</p>
+      <hr>
+      
+      {% if session.get('settings_success') %}
+        <div class="alert alert-success p-2 small mb-3 alert-dismissible fade show">
+          <i class="bi bi-check-circle-fill"></i> {{ session.pop('settings_success') }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
+      {% endif %}
 
-
-
-      </div>
+      <form method="POST" action="/settings/app" enctype="multipart/form-data">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label small font-bold">PDF Max Rows</label>
+            <input type="number" name="PDF_MAX_ROWS" class="form-control form-control-sm" value="{{ app_settings.get('PDF_MAX_ROWS', '1000') }}" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small font-bold">PDF Max Days</label>
+            <input type="number" name="PDF_MAX_DAYS" class="form-control form-control-sm" value="{{ app_settings.get('PDF_MAX_DAYS', '90') }}" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small font-bold">Retention Policy (Months)</label>
+            <input type="number" name="RETENTION_MONTHS" class="form-control form-control-sm" value="{{ app_settings.get('RETENTION_MONTHS', '12') }}" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small font-bold">Audit Log Page Limit</label>
+            <input type="number" name="AUDIT_LOG_LIMIT" class="form-control form-control-sm" value="{{ app_settings.get('AUDIT_LOG_LIMIT', '500') }}" required>
+          </div>
+          <div class="col-md-12">
+            <label class="form-label small font-bold">Report Date Range Limit (Days)</label>
+            <input type="number" name="REPORT_DATE_RANGE_DAYS" class="form-control form-control-sm" value="{{ app_settings.get('REPORT_DATE_RANGE_DAYS', '365') }}" required>
+          </div>
+          <div class="col-md-12">
+            <label class="form-label small font-bold">Upload Dynamic Logo Image</label>
+            <input type="file" name="logo_file" class="form-control form-control-sm" accept=".png,.jpg,.jpeg,.gif">
+            <div class="form-text small" style="font-size:10px;">Max size 2MB. Dynamic logo will display at the top of PDF/CSV/TXT reports.</div>
+          </div>
+          
+          {% if app_settings.get('LOGO_PATH') %}
+          <div class="col-md-12">
+            <label class="form-label small font-bold d-block">Current Active Logo Preview</label>
+            <div class="p-2 border rounded bg-white text-center" style="max-height: 100px; overflow: hidden; max-width: 200px;">
+              <img src="{{ url_for('static', filename=app_settings.get('LOGO_PATH')) }}" alt="Company Logo" style="max-height: 80px; width: auto; object-fit: contain;">
+            </div>
+          </div>
+          {% endif %}
+        </div>
+        <button type="submit" class="btn btn-primary w-100 font-bold mt-4"><i class="bi bi-save"></i> Save Configurations</button>
+      </form>
     </div>
+    {% endif %}
   </div>
 
 </main>
@@ -1188,7 +1267,6 @@
           </div>
           <label class="form-label small fw-bold text-muted text-uppercase" style="letter-spacing:.5px;">Assign New Role</label>
           <select name="new_role" id="modalRoleSelect" class="form-select form-select-lg" style="border-radius:10px;">
-            <option value="guest">👤 Guest — View only</option>
             <option value="staff">🧑‍💼 Staff — Translate only</option>
             <option value="manager">👔 Manager — Team logs &amp; analytics</option>
             <option value="admin">🔑 Admin — Full system access</option>
@@ -1200,6 +1278,44 @@
         <div class="modal-footer border-0 pt-0">
           <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
           <button type="submit" class="btn btn-primary fw-bold"><i class="bi bi-check-circle"></i> Update Role</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── CHANGE PASSWORD MODAL ────────────────────────────────── -->
+<div class="modal fade" id="changePasswordModal" tabindex="-1" aria-labelledby="changePasswordModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.15);">
+      <div class="modal-header" style="background: linear-gradient(135deg, #0f172a, #1e293b); border-radius: 16px 16px 0 0; border: none;">
+        <h5 class="modal-title text-white" id="changePasswordModalLabel"><i class="bi bi-key"></i> Change Password</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" id="changePasswordForm" action="/manage-users/change-password/0">
+        <div class="modal-body p-4">
+          <div class="text-center mb-3">
+            <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#eab308,#facc15);display:inline-flex;align-items:center;justify-content:center;margin-bottom:8px;">
+              <i class="bi bi-shield-lock" style="color:white;font-size:22px;"></i>
+            </div>
+            <div class="fw-bold" id="pwModalUsername" style="font-size:15px;"></div>
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label small fw-bold text-muted text-uppercase" style="letter-spacing:.5px;">New Password</label>
+            <input type="password" name="new_password" id="pwModalNewPassword" class="form-control" placeholder="Min 8 chars" required minlength="8">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-bold text-muted text-uppercase" style="letter-spacing:.5px;">Confirm Password</label>
+            <input type="password" name="confirm_password" id="pwModalConfirmPassword" class="form-control" placeholder="Confirm new password" required minlength="8">
+          </div>
+          <div class="mt-2 p-2 rounded-3 small" style="background:#f8fafc;border:1px solid #e2e8f0;">
+            <i class="bi bi-info-circle text-warning"></i> Password must be at least 8 characters long.
+          </div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning fw-bold text-white"><i class="bi bi-check-circle"></i> Save Password</button>
         </div>
       </form>
     </div>
@@ -1414,6 +1530,16 @@
     const sel = document.getElementById('modalRoleSelect');
     if (sel) sel.value = currentRole;
     const modal = new bootstrap.Modal(document.getElementById('editRoleModal'));
+    modal.show();
+  }
+
+  // --- Change Password Modal ---
+  function openChangePasswordModal(userId, username) {
+    document.getElementById('changePasswordForm').action = `/manage-users/change-password/${userId}`;
+    document.getElementById('pwModalUsername').textContent = username;
+    document.getElementById('pwModalNewPassword').value = '';
+    document.getElementById('pwModalConfirmPassword').value = '';
+    const modal = new bootstrap.Modal(document.getElementById('changePasswordModal'));
     modal.show();
   }
 

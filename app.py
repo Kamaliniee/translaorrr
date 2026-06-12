@@ -28,13 +28,72 @@ app = Flask(__name__)
 
 # Placeholder stubs for removed services
 
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
 def check_and_notify_manager(*args, **kwargs):
     """No-op stub for manager notifications."""
     pass
 
 def send_email(to, subject, html_body):
-    """No-op email sender."""
-    pass
+    """SMTP Email sender with support for both SSL and STARTTLS, falling back to console logging."""
+    smtp_server = os.environ.get('SMTP_SERVER')
+    smtp_port = os.environ.get('SMTP_PORT')
+    smtp_user = os.environ.get('SMTP_USER')
+    smtp_password = os.environ.get('SMTP_PASSWORD')
+    smtp_from = os.environ.get('SMTP_FROM_EMAIL', 'no-reply@doctranslate.com')
+    
+    def safe_print(text):
+        try:
+            print(text)
+        except UnicodeEncodeError:
+            try:
+                import sys
+                enc = sys.stdout.encoding or 'utf-8'
+                print(text.encode(enc, errors='replace').decode(enc))
+            except Exception:
+                print(text.encode('ascii', errors='replace').decode('ascii'))
+
+    # Check if not configured or using default placeholders
+    if not smtp_server or 'company.com' in smtp_user or not smtp_password:
+        safe_print("\n=== [SIMULATED EMAIL SENDER] ===")
+        safe_print(f"To:      {to}")
+        safe_print(f"Subject: {subject}")
+        safe_print("Body:")
+        safe_print(html_body)
+        safe_print("=================================\n")
+        return True
+
+    try:
+        port = int(smtp_port)
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From'] = smtp_from
+        msg['To'] = to
+        
+        part = MIMEText(html_body, 'html')
+        msg.attach(part)
+        
+        if port == 465:
+            server = smtplib.SMTP_SSL(smtp_server, port, timeout=5)
+        else:
+            server = smtplib.SMTP(smtp_server, port, timeout=5)
+            server.starttls()
+            
+        server.login(smtp_user, smtp_password)
+        server.sendmail(smtp_from, [to], msg.as_string())
+        server.quit()
+        return True
+    except Exception as e:
+        safe_print(f"Failed to send email to {to} via SMTP: {e}")
+        safe_print("\n=== [FALLBACK EMAIL SENDER] ===")
+        safe_print(f"To:      {to}")
+        safe_print(f"Subject: {subject}")
+        safe_print("Body:")
+        safe_print(html_body)
+        safe_print("=================================\n")
+        return False
 
 def get_simulated_mailbox():
     """Return empty simulated mailbox."""
@@ -207,7 +266,7 @@ def init_db():
         full_name VARCHAR(255),
         email VARCHAR(255) UNIQUE,
         password_hash VARCHAR(255),
-        role VARCHAR(50) DEFAULT 'guest',
+        role VARCHAR(50) DEFAULT 'staff',
         active BOOLEAN DEFAULT TRUE,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -303,8 +362,88 @@ def init_db():
     )
     """)
     
+    # 8. Password Resets Table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS password_resets(
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        token VARCHAR(255) NOT NULL UNIQUE,
+        expires_at DATETIME NOT NULL,
+        used BOOLEAN DEFAULT FALSE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+    """)
+
+    # 9. Translations Archive Table (long-term storage for old records)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS translations_archive(
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        original_id INT,
+        user_id INT,
+        username VARCHAR(255),
+        source_language VARCHAR(50),
+        target_language VARCHAR(50),
+        filename VARCHAR(255),
+        file_type VARCHAR(50),
+        file_size INT DEFAULT 0,
+        word_count INT DEFAULT 0,
+        status VARCHAR(50) DEFAULT 'Completed',
+        processing_time DOUBLE DEFAULT 0.0,
+        engine VARCHAR(50) DEFAULT 'google',
+        confidence_score DOUBLE DEFAULT 95.0,
+        cost DOUBLE DEFAULT 0.0,
+        translated_at DATETIME,
+        archived_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    # 10. Application Settings Table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS app_settings(
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        setting_key VARCHAR(100) UNIQUE NOT NULL,
+        setting_value TEXT NOT NULL,
+        description TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+    """)
+
     conn.commit()
-    
+
+    # Seed default application settings (INSERT IGNORE = safe for re-runs)
+    default_settings = [
+        ('PDF_MAX_ROWS',         '1000',  'Maximum detail rows included in PDF export'),
+        ('PDF_MAX_DAYS',         '90',    'Maximum days window for PDF detail activity table'),
+        ('RETENTION_MONTHS',     '12',    'Months of detailed translation history to keep before archiving'),
+        ('AUDIT_LOG_LIMIT',      '500',   'Maximum rows returned by the audit log API'),
+        ('REPORT_DATE_RANGE_DAYS', '365', 'Maximum allowed date range (days) for analytics reports'),
+        ('LOGO_PATH',            'prodapt_logo.png', 'Filename of the corporate branding logo in the static folder'),
+    ]
+    for key, value, desc in default_settings:
+        cursor.execute(
+            "INSERT IGNORE INTO app_settings (setting_key, setting_value, description) VALUES (%s, %s, %s)",
+            (key, value, desc)
+        )
+    conn.commit()
+
+    # --- Performance Indexes (safe: check before creating) ---
+    index_defs = [
+        ('idx_translations_date',   'translations',  'translated_at'),
+        ('idx_translations_user',   'translations',  'user_id'),
+        ('idx_translations_status', 'translations',  'status'),
+        ('idx_audit_logs_timestamp','audit_logs',    'timestamp'),
+        ('idx_audit_logs_username', 'audit_logs',    'username'),
+    ]
+    for idx_name, tbl, col in index_defs:
+        cursor.execute("SHOW INDEX FROM `%s` WHERE Key_name = '%s'" % (tbl, idx_name))
+        if not cursor.fetchone():
+            try:
+                cursor.execute("CREATE INDEX `%s` ON `%s`(`%s`)" % (idx_name, tbl, col))
+            except Exception:
+                pass  # Index may already exist under different name
+    conn.commit()
+
     # Check table columns / Migration support for legacy database schema
     cursor.execute("SHOW COLUMNS FROM translations")
     columns_translations = [row['Field'] for row in cursor.fetchall()]
@@ -374,14 +513,13 @@ def init_db():
         )
         """)
 
-    # Seed Initial Enterprise Users
+    # Seed Initial Enterprise Users (Guest role removed — minimum role is Staff)
     initial_users = [
-        ('AdminUser', 'Admin User', 'admin@company.com', 'admin'),
-        ('ManagerUser', 'Manager User', 'manager@company.com', 'manager'),
-        ('StaffUser', 'Staff User', 'staff@company.com', 'staff'),
-        ('JohnDoe', 'John Doe', 'john.doe@company.com', 'staff'),
-        ('SalesAgent', 'Sales Agent', 'sales@company.com', 'staff'),
-        ('GuestUser', 'Guest User', 'guest@company.com', 'guest'),
+        ('AdminUser',   'Admin User',   'admin@company.com',    'admin'),
+        ('ManagerUser', 'Manager User', 'manager@company.com',  'manager'),
+        ('StaffUser',   'Staff User',   'staff@company.com',    'staff'),
+        ('JohnDoe',     'John Doe',     'john.doe@company.com', 'staff'),
+        ('SalesAgent',  'Sales Agent',  'sales@company.com',    'staff'),
     ]
     for username, full_name, email, role in initial_users:
         cursor.execute(
@@ -409,6 +547,21 @@ def init_db():
 
 # Start Database setup
 init_db()
+
+# --- Application Settings Helper ---
+def get_setting(key, default=None):
+    """Read a value from app_settings table; return default if not found."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT setting_value FROM app_settings WHERE setting_key = %s", (key,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return row['setting_value']
+    except Exception:
+        pass
+    return default
 
 # --- Role Based Access Control Helper ---
 def get_current_user():
@@ -541,7 +694,7 @@ def process_batch_job(job_id, files_list, direction, engine, department, usernam
         <p style="font-size: 11px; color: #94a3b8; margin-top: 24px;">This notification was dispatched automatically. Do not reply to this email.</p>
     </div>
     """
-    pass
+    send_email(user_email, subject, html_body)
 
 # --- ROUTES ---
 
@@ -650,7 +803,7 @@ def register():
         else:
             password_hash = generate_password_hash(password)
             cursor.execute(
-                "INSERT INTO users (username, full_name, email, password_hash, role, active) VALUES (%s, %s, %s, %s, 'guest', TRUE)",
+                "INSERT INTO users (username, full_name, email, password_hash, role, active) VALUES (%s, %s, %s, %s, 'staff', TRUE)",
                 (username, full_name, email, password_hash)
             )
             conn.commit()
@@ -660,7 +813,7 @@ def register():
                 user_id,
                 username,
                 email,
-                'guest',
+                'staff',
                 get_client_ip(),
                 datetime.utcnow(),
                 None,
@@ -671,7 +824,7 @@ def register():
             conn.close()
             session['user_id'] = user_id
             session['username'] = username
-            session['role'] = 'guest'
+            session['role'] = 'staff'
             session['full_name'] = full_name
             return redirect(url_for('dashboard'))
         conn.close()
@@ -693,6 +846,137 @@ def logout():
         conn.close()
     session.clear()
     return redirect(url_for('login'))
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    error = None
+    success = None
+    link_to_show = None
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        if not email:
+            error = "Email address is required."
+        else:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, username FROM users WHERE email = %s AND active = TRUE", (email,))
+            user_row = cursor.fetchone()
+            
+            # Check if SMTP is configured
+            smtp_server = os.environ.get('SMTP_SERVER')
+            smtp_user = os.environ.get('SMTP_USER')
+            smtp_password = os.environ.get('SMTP_PASSWORD')
+            is_simulated = not smtp_server or 'company.com' in smtp_user or not smtp_password
+            
+            if user_row:
+                user_id = user_row['id']
+                username = user_row['username']
+                # Generate a cryptographically secure token
+                token = secrets.token_urlsafe(32)
+                expires_at = datetime.utcnow() + timedelta(minutes=15)
+                
+                # Invalidate any existing unused reset tokens for this user
+                cursor.execute("UPDATE password_resets SET used = TRUE WHERE user_id = %s", (user_id,))
+                
+                # Insert the new reset token
+                cursor.execute(
+                    "INSERT INTO password_resets (user_id, token, expires_at) VALUES (%s, %s, %s)",
+                    (user_id, token, expires_at)
+                )
+                conn.commit()
+                
+                # Create the reset link
+                reset_link = url_for('reset_password', token=token, _external=True)
+                
+                # Send the email
+                subject = "🔒 Reset Your DocTranslate Password"
+                html_body = f"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; border: 1.5px solid #dc2626; border-radius: 12px; padding: 24px; color: #1e293b;">
+                    <h2 style="color: #dc2626; margin-top: 0;">🔒 Password Reset Request</h2>
+                    <p>Hello <strong>{username}</strong>,</p>
+                    <p>We received a request to reset your password for your DocTranslate account. Click the button below to set a new password:</p>
+                    
+                    <div style="text-align: center; margin: 24px 0;">
+                        <a href="{reset_link}" style="background: #dc2626; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block; box-shadow: 0 4px 6px rgba(220,38,38,0.2);">
+                            Reset Password
+                        </a>
+                    </div>
+                    
+                    <p style="font-size: 13px; color: #475569;">This link will expire in <strong>15 minutes</strong> for security reasons. If you did not request a password reset, you can safely ignore this email.</p>
+                    <p style="font-size: 12px; color: #94a3b8; border-top: 1.5px solid #e2e8f0; padding-top: 12px; margin-top: 24px;">If the button above does not work, copy and paste this URL into your browser:<br><a href="{reset_link}">{reset_link}</a></p>
+                </div>
+                """
+                send_email(email, subject, html_body)
+                log_action(conn, username, 'request_password_reset', f"Password reset link requested for email: {email}")
+                
+                if is_simulated:
+                    link_to_show = reset_link
+                
+            else:
+                # To prevent username enumeration, we still show a success message even if the user doesn't exist
+                time.sleep(0.5) # Slight delay to simulate SMTP latency consistency
+                
+            success = "If the email is registered and active in our system, a password reset link has been sent."
+            conn.close()
+            
+    return render_template('forgot_password.html', error=error, success=success, link_to_show=link_to_show)
+
+@app.route('/reset-password', methods=['GET', 'POST'])
+def reset_password():
+    token = request.args.get('token') or request.form.get('token')
+    if not token:
+        return render_template('reset_password.html', error="Invalid or missing password reset token.")
+        
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Validate token
+    cursor.execute(
+        """
+        SELECT r.id, r.user_id, r.expires_at, r.used, u.username 
+        FROM password_resets r
+        JOIN users u ON r.user_id = u.id
+        WHERE r.token = %s AND r.used = FALSE
+        """,
+        (token,)
+    )
+    reset_row = cursor.fetchone()
+    
+    if not reset_row:
+        conn.close()
+        return render_template('reset_password.html', error="This reset link is invalid or has already been used.")
+        
+    # Check expiration
+    if datetime.utcnow() > reset_row['expires_at']:
+        conn.close()
+        return render_template('reset_password.html', error="This reset link has expired. Please request a new one.")
+        
+    error = None
+    success = None
+    
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+        
+        if not password or not confirm_password:
+            error = "All fields are required."
+        elif password != confirm_password:
+            error = "Passwords do not match."
+        elif len(password) < 8:
+            error = "Password must be at least 8 characters long."
+        else:
+            # Hash and update password
+            hashed = generate_password_hash(password)
+            cursor.execute("UPDATE users SET password_hash = %s WHERE id = %s", (hashed, reset_row['user_id']))
+            # Mark token as used
+            cursor.execute("UPDATE password_resets SET used = TRUE WHERE id = %s", (reset_row['id'],))
+            conn.commit()
+            
+            log_action(conn, reset_row['username'], 'reset_password_success', "Password successfully reset via token.")
+            success = "Your password has been successfully reset. You can now log in with your new password."
+            
+    conn.close()
+    return render_template('reset_password.html', token=token, error=error, success=success)
 
 @app.route('/account/update', methods=['POST'])
 @login_required
@@ -993,6 +1277,11 @@ def dashboard():
             'role': role
         }
 
+    # 4. Gather Dashboard Stats (Usage Analytics)
+    # Fetch application settings
+    cursor.execute("SELECT setting_key, setting_value FROM app_settings")
+    app_settings = {row['setting_key']: row['setting_value'] for row in cursor.fetchall()}
+
     conn.close()
 
     user_error = session.pop('user_error', None)
@@ -1030,7 +1319,8 @@ def dashboard():
         user_success=user_success,
         current_user=current_user,
         account_error=account_error,
-        account_success=account_success
+        account_success=account_success,
+        app_settings=app_settings
     )
 
 # --- BATCH FILE UPLOAD & PROGRESS BAR ---
@@ -1206,12 +1496,12 @@ def manage_users_add():
     new_username = request.form.get('new_username', '').strip()
     new_full_name = request.form.get('new_full_name', '').strip()
     new_email = request.form.get('new_email', '').strip().lower()
-    new_role = request.form.get('new_role', 'guest')
+    new_role = request.form.get('new_role', 'staff')
     new_password = request.form.get('new_password', 'password123').strip()
 
-    allowed_roles = ('admin', 'manager', 'staff', 'guest')
+    allowed_roles = ('admin', 'manager', 'staff')
     if new_role not in allowed_roles:
-        new_role = 'guest'
+        new_role = 'staff'
 
     if not new_username or not new_email:
         session['user_error'] = "Username and email address are required!"
@@ -1238,7 +1528,7 @@ def manage_users_add():
 @admin_required
 def manage_users_update_role(user_id):
     new_role = request.form.get('new_role', '').strip().lower()
-    allowed_roles = ('admin', 'manager', 'staff', 'guest')
+    allowed_roles = ('admin', 'manager', 'staff')
     if not new_role or new_role not in allowed_roles:
         return redirect(url_for('dashboard', _anchor='usersTab'))
 
@@ -1267,6 +1557,133 @@ def manage_users_delete(user_id):
         conn.commit()
     conn.close()
     return redirect(url_for('dashboard', _anchor='usersTab'))
+
+
+@app.route('/manage-users/change-password/<int:user_id>', methods=['POST'])
+@admin_required
+def manage_users_change_password(user_id):
+    """Admin-only: Reset/change any user's password."""
+    new_password = request.form.get('new_password', '').strip()
+    confirm_password = request.form.get('confirm_password', '').strip()
+    admin_username = session.get('username')
+
+    if not new_password or not confirm_password:
+        session['pw_error'] = "Both password fields are required."
+        return redirect(url_for('dashboard', _anchor='usersTab'))
+    if new_password != confirm_password:
+        session['pw_error'] = "Passwords do not match."
+        return redirect(url_for('dashboard', _anchor='usersTab'))
+    if len(new_password) < 8:
+        session['pw_error'] = "Password must be at least 8 characters."
+        return redirect(url_for('dashboard', _anchor='usersTab'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT username FROM users WHERE id = %s", (user_id,))
+    target_user = cursor.fetchone()
+    if not target_user:
+        conn.close()
+        session['pw_error'] = "User not found."
+        return redirect(url_for('dashboard', _anchor='usersTab'))
+
+    target_username = target_user['username']
+    new_hash = generate_password_hash(new_password)
+    cursor.execute(
+        "UPDATE users SET password_hash = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+        (new_hash, user_id)
+    )
+    log_action(
+        conn, admin_username, 'PASSWORD_RESET',
+        f"Admin '{admin_username}' reset password for user '{target_username}'."
+    )
+    conn.commit()
+    conn.close()
+    session['pw_success'] = f"Password for '{target_username}' updated successfully."
+    return redirect(url_for('dashboard', _anchor='usersTab'))
+
+
+@app.route('/admin/archive-old-translations', methods=['POST'])
+@admin_required
+def archive_old_translations():
+    """Move translations older than RETENTION_MONTHS to translations_archive."""
+    retention_months = int(get_setting('RETENTION_MONTHS', '12'))
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    # Copy old records to archive
+    cursor.execute("""
+        INSERT INTO translations_archive
+            (original_id, user_id, username, source_language, target_language,
+             filename, file_type, file_size, word_count, status, processing_time,
+             engine, confidence_score, cost, translated_at)
+        SELECT id, user_id, username, source_language, target_language,
+               filename, file_type, file_size, word_count, status, processing_time,
+               engine, confidence_score, cost, translated_at
+        FROM translations
+        WHERE translated_at < DATE_SUB(NOW(), INTERVAL %s MONTH)
+    """, (retention_months,))
+    moved = cursor.rowcount
+    # Delete the originals that were just archived
+    cursor.execute(
+        "DELETE FROM translations WHERE translated_at < DATE_SUB(NOW(), INTERVAL %s MONTH)",
+        (retention_months,)
+    )
+    log_action(conn, session.get('username'), 'archive_translations',
+               f"Archived {moved} translation records older than {retention_months} months.")
+    conn.commit()
+    conn.close()
+    session['archive_msg'] = f"Successfully archived {moved} translation records older than {retention_months} months."
+    return redirect(url_for('dashboard', _anchor='reportsTab'))
+
+
+@app.route('/settings/app', methods=['GET', 'POST'])
+@admin_required
+def app_settings_view():
+    """Get or update configurable application settings."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    if request.method == 'POST':
+        updatable_keys = ('PDF_MAX_ROWS', 'PDF_MAX_DAYS', 'RETENTION_MONTHS',
+                          'AUDIT_LOG_LIMIT', 'REPORT_DATE_RANGE_DAYS')
+        for key in updatable_keys:
+            val = request.form.get(key, '').strip()
+            if val and val.isdigit():
+                cursor.execute(
+                    "UPDATE app_settings SET setting_value = %s WHERE setting_key = %s",
+                    (val, key)
+                )
+        
+        # Handle corporate logo upload (Feature 8)
+        if 'logo_file' in request.files:
+            logo_file = request.files['logo_file']
+            if logo_file and logo_file.filename != '':
+                ext = os.path.splitext(logo_file.filename)[1].lower()
+                if ext in ('.png', '.jpg', '.jpeg', '.gif'):
+                    logo_file.seek(0, os.SEEK_END)
+                    file_size = logo_file.tell()
+                    logo_file.seek(0)
+                    if file_size <= 2 * 1024 * 1024:
+                        filename = f"logo_{int(time.time())}{ext}"
+                        logo_path = os.path.join(app.root_path, 'static', filename)
+                        logo_file.save(logo_path)
+                        cursor.execute(
+                            "INSERT INTO app_settings (setting_key, setting_value, description) "
+                            "VALUES ('LOGO_PATH', %s, 'Filename of the corporate branding logo in the static folder') "
+                            "ON DUPLICATE KEY UPDATE setting_value = %s",
+                            (filename, filename)
+                        )
+                        log_action(conn, session.get('username'), 'upload_logo', f"Uploaded new corporate branding logo '{filename}'.")
+
+        log_action(conn, session.get('username'), 'update_settings', 'Updated application configuration settings.')
+        conn.commit()
+        conn.close()
+        session['settings_success'] = 'Configuration settings updated successfully.'
+        return redirect(url_for('dashboard', _anchor='accountTab'))
+
+    cursor.execute("SELECT setting_key, setting_value, description FROM app_settings ORDER BY id")
+    settings = cursor.fetchall()
+    conn.close()
+    return jsonify({s['setting_key']: {'value': s['setting_value'], 'description': s['description']} for s in settings})
+
 
 # --- COMPREHENSIVE AUDIT & CSV TRAILING ---
 
@@ -1340,144 +1757,167 @@ def export_analytics():
     to_date_raw = request.args.get('to_date', '')
     output_format = request.args.get('format', 'csv').lower()
 
-    query = "SELECT id, username, source_language, target_language, filename, file_type, file_size, word_count, status, processing_time, engine, confidence_score, cost, translated_at FROM translations"
-    params = []
-    filters = []
+    # --- Safety limits for details table ---
+    pdf_max_rows = int(get_setting('PDF_MAX_ROWS', '1000'))
+    pdf_max_days = int(get_setting('PDF_MAX_DAYS', '90'))
 
+    filters = []
+    params = []
     try:
         if from_date_raw:
-            from_date = datetime.strptime(from_date_raw, '%Y-%m-%d')
             filters.append('translated_at >= %s')
-            params.append(from_date.strftime('%Y-%m-%d 00:00:00'))
+            params.append(datetime.strptime(from_date_raw, '%Y-%m-%d').strftime('%Y-%m-%d 00:00:00'))
         if to_date_raw:
-            to_date = datetime.strptime(to_date_raw, '%Y-%m-%d')
             filters.append('translated_at <= %s')
-            params.append(to_date.strftime('%Y-%m-%d 23:59:59'))
+            params.append(datetime.strptime(to_date_raw, '%Y-%m-%d').strftime('%Y-%m-%d 23:59:59'))
     except ValueError:
         return "Invalid date range format. Use YYYY-MM-DD.", 400
 
-    if filters:
-        query += ' WHERE ' + ' AND '.join(filters)
-    query += ' ORDER BY translated_at DESC'
+    where_clause = (' WHERE ' + ' AND '.join(filters)) if filters else ''
 
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(query, params)
-    rows = cursor.fetchall()
 
-    cursor.execute("SELECT COUNT(*) as total_translations, COALESCE(SUM(word_count),0) as total_words, COALESCE(AVG(file_size),0) as avg_file_size, COUNT(DISTINCT CONCAT(source_language,'-',target_language)) as lang_pairs FROM translations" + ((' WHERE ' + ' AND '.join(filters)) if filters else ''), params)
+    # Full-dataset summary metrics
+    cursor.execute(
+        f"SELECT COUNT(*) as total_translations, COALESCE(SUM(word_count),0) as total_words, "
+        f"COALESCE(AVG(file_size),0) as avg_file_size FROM translations{where_clause}", params)
     stats = cursor.fetchone()
 
-    # Language pair breakdown
-    cursor.execute("SELECT CONCAT(source_language, ' → ', target_language) AS pair, COUNT(*) AS count FROM translations" + ((' WHERE ' + ' AND '.join(filters)) if filters else '') + " GROUP BY source_language, target_language ORDER BY count DESC LIMIT 5", params)
-    pair_breakdown = cursor.fetchall()
+    # Files translated
+    cursor.execute(
+        f"SELECT COUNT(*) as files_translated FROM translations "
+        f"{where_clause if where_clause else ' WHERE '} "
+        f"{' AND ' if where_clause else ''} filename IS NOT NULL AND filename != 'Text Box Input' AND filename != 'Text Input'", params)
+    files_translated = cursor.fetchone()["files_translated"]
 
-    # Daily counts for report
-    cursor.execute("SELECT DATE_FORMAT(translated_at, '%%Y-%%m-%%d') as day, COUNT(*) as count, COALESCE(SUM(word_count),0) as words FROM translations" + ((' WHERE ' + ' AND '.join(filters)) if filters else '') + " GROUP BY day ORDER BY day DESC LIMIT 10", params)
-    daily_counts = cursor.fetchall()
+    # Most common translation direction
+    cursor.execute(
+        f"SELECT CONCAT(source_language,' -> ',target_language) as direction, COUNT(*) as cnt "
+        f"FROM translations{where_clause} GROUP BY source_language, target_language "
+        f"ORDER BY cnt DESC LIMIT 1", params)
+    common_dir_row = cursor.fetchone()
+    common_direction = common_dir_row['direction'] if common_dir_row else 'N/A'
 
-    # User activity for report
-    cursor.execute("SELECT username, COUNT(*) as count, COALESCE(SUM(word_count),0) as words FROM translations" + ((' WHERE ' + ' AND '.join(filters)) if filters else '') + " GROUP BY username ORDER BY count DESC LIMIT 10", params)
-    user_activity = cursor.fetchall()
+    # Detailed activity query with safety limits
+    details_filters = list(filters)
+    details_params = list(params)
+    details_filters.append("translated_at >= DATE_SUB(NOW(), INTERVAL %s DAY)")
+    details_params.append(pdf_max_days)
 
+    details_where = ' WHERE ' + ' AND '.join(details_filters)
+    details_query = (
+        f"SELECT DATE_FORMAT(translated_at, '%%Y-%%m-%%d %%H:%%i') as date_str, "
+        f"username, source_language, target_language, filename, word_count, status "
+        f"FROM translations{details_where} ORDER BY translated_at DESC LIMIT %s"
+    )
+    details_params.append(pdf_max_rows)
+    cursor.execute(details_query, tuple(details_params))
+    rows = cursor.fetchall()
     conn.close()
 
-    report_name = f"DocTranslate_AnalyticsReport_{datetime.utcnow().strftime('%Y%m%d')}." + ('xlsx' if output_format == 'xlsx' else 'csv')
+    period_str = f"{from_date_raw or 'Start'} to {to_date_raw or 'End'}"
+    if not from_date_raw and not to_date_raw:
+        period_str = "All Time"
+    now_str = datetime.now().strftime("%d-%m-%Y %H:%M")
+    username = session.get('username', 'System')
 
     if output_format == 'xlsx':
+        # Excel branded sheet (non-zipped)
         from openpyxl import Workbook
-        from openpyxl.styles import Font, PatternFill, Alignment
         wb = Workbook()
         summary = wb.active
-        summary.title = 'Summary'
-        # Header styling
-        header_font = Font(bold=True, size=12)
-        header_fill = PatternFill('solid', fgColor='DC2626')
-
-        summary.append(['DocTranslate Analytics Report'])
-        summary.append(['Report generated', datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')])
-        summary.append(['Period From', from_date_raw or 'All time'])
-        summary.append(['Period To', to_date_raw or 'All time'])
+        summary.title = 'Analytics Summary'
+        
+        summary.append(['PRODAPT'])
+        summary.append(['Translation Analytics Report'])
+        summary.append(['Generated On', now_str])
+        summary.append(['Generated By', username])
+        summary.append(['Period', period_str])
         summary.append([])
-        summary.append(['SUMMARY METRICS', ''])
+        
+        summary.append(['SUMMARY METRICS'])
         summary.append(['Total Translations', stats['total_translations']])
         summary.append(['Total Words Processed', stats['total_words']])
-        summary.append(['Files Translated', stats['total_translations']])
+        summary.append(['Files Translated', files_translated])
         summary.append(['Average File Size (KB)', round(float(stats['avg_file_size'] or 0) / 1024, 2)])
-        summary.append(['Language Pairs Used', stats.get('lang_pairs', 0)])
+        summary.append(['Most Common Direction', common_direction])
         summary.append([])
-
-        # Language pair breakdown
-        summary.append(['LANGUAGE PAIR STATISTICS', ''])
-        summary.append(['Language Pair', 'Translation Count'])
-        for p in pair_breakdown:
-            summary.append([p['pair'], p['count']])
-        summary.append([])
-
-        # Daily counts
-        summary.append(['DAILY TRANSLATION COUNTS', ''])
-        summary.append(['Date', 'Translations', 'Words'])
-        for d in daily_counts:
-            summary.append([d['day'], d['count'], d['words']])
-        summary.append([])
-
-        # User activity
-        summary.append(['USER ACTIVITY SUMMARY', ''])
-        summary.append(['Username', 'Translations', 'Words'])
-        for u in user_activity:
-            summary.append([u['username'], u['count'], u['words']])
-
-        detail_sheet = wb.create_sheet('Translation Details')
-        detail_sheet.append(['ID', 'Username', 'Source Lang', 'Target Lang', 'Filename', 'File Type', 'File Size (Bytes)', 'Word Count', 'Status', 'Processing Time (s)', 'Engine', 'Translated At'])
+        
+        summary.append(['DETAILED TRANSLATION ACTIVITY'])
+        summary.append(['Date', 'User', 'Source Lang', 'Target Lang', 'Filename', 'Word Count', 'Status'])
         for r in rows:
-            detail_sheet.append([r['id'], r['username'], r['source_language'], r['target_language'], r['filename'], r['file_type'], r['file_size'], r['word_count'], r['status'], r['processing_time'], r['engine'], str(r['translated_at'])])
-
+            summary.append([r['date_str'], r['username'], r['source_language'], r['target_language'], r['filename'], r['word_count'], r['status']])
+            
         mem_file = io.BytesIO()
         wb.save(mem_file)
         mem_file.seek(0)
-        return send_file(mem_file, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=report_name)
+        return send_file(mem_file, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=f"DocTranslate_Report_{datetime.utcnow().strftime('%Y%m%d')}.xlsx")
 
-    import csv as csv_module
+    # Generate text report for CSV or TXT
+    if output_format == 'csv':
+        output = io.StringIO()
+        import csv as csv_module
+        writer = csv_module.writer(output)
+        writer.writerow(['PRODAPT'])
+        writer.writerow(['Translation Analytics Report'])
+        writer.writerow(['Generated On', now_str])
+        writer.writerow(['Generated By', username])
+        writer.writerow(['Period', period_str])
+        writer.writerow([])
+        writer.writerow(['SUMMARY METRICS'])
+        writer.writerow(['Total Translations', stats['total_translations']])
+        writer.writerow(['Total Words Processed', stats['total_words']])
+        writer.writerow(['Files Translated', files_translated])
+        writer.writerow(['Average File Size (KB)', round(float(stats['avg_file_size'] or 0) / 1024, 2)])
+        writer.writerow(['Most Common Direction', common_direction])
+        writer.writerow([])
+        writer.writerow(['DETAILED TRANSLATION ACTIVITY'])
+        writer.writerow(['Date', 'User', 'Source Lang', 'Target Lang', 'Filename', 'Word Count', 'Status'])
+        for r in rows:
+            writer.writerow([r['date_str'], r['username'], r['source_language'], r['target_language'], r['filename'], r['word_count'], r['status']])
+        report_content = output.getvalue().encode('utf-8-sig')
+        report_filename = f"DocTranslate_Report_{datetime.utcnow().strftime('%Y%m%d')}.csv"
+    else:
+        # Default to TXT format
+        output = io.StringIO()
+        output.write("==================================================\n")
+        output.write("PRODAPT\n")
+        output.write("Translation Analytics Report\n")
+        output.write(f"Generated On: {now_str}\n")
+        output.write(f"Generated By: {username}\n")
+        output.write(f"Period: {period_str}\n")
+        output.write("==================================================\n\n")
+        output.write("SUMMARY METRICS:\n")
+        output.write("--------------------------------------------------\n")
+        output.write(f"Total Translations: {stats['total_translations']:,}\n")
+        output.write(f"Total Words Processed: {stats['total_words']:,}\n")
+        output.write(f"Files Translated: {files_translated:,}\n")
+        output.write(f"Average File Size: {round(float(stats['avg_file_size'] or 0) / 1024, 2):,} KB\n")
+        output.write(f"Most Common Direction: {common_direction}\n\n")
+        output.write("DETAILED TRANSLATION ACTIVITY:\n")
+        output.write("--------------------------------------------------\n")
+        output.write("Date | User | Source | Target | File Name | Word Count | Status\n")
+        for r in rows:
+            output.write(f"{r['date_str']} | {r['username']} | {r['source_language']} | {r['target_language']} | {r['filename']} | {r['word_count']:,} | {r['status']}\n")
+        report_content = output.getvalue().encode('utf-8')
+        report_filename = f"DocTranslate_Report_{datetime.utcnow().strftime('%Y%m%d')}.txt"
 
-    output = io.StringIO()
-    writer = csv_module.writer(output)
-    writer.writerow(['DocTranslate Analytics Report'])
-    writer.writerow(['Report generated', datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')])
-    writer.writerow(['Period From', from_date_raw or 'All time'])
-    writer.writerow(['Period To', to_date_raw or 'All time'])
-    writer.writerow([])
-    writer.writerow(['SUMMARY METRICS', ''])
-    writer.writerow(['Total Translations', stats['total_translations']])
-    writer.writerow(['Total Words Processed', stats['total_words']])
-    writer.writerow(['Files Translated', stats['total_translations']])
-    writer.writerow(['Average File Size (KB)', round(float(stats['avg_file_size'] or 0) / 1024, 2)])
-    writer.writerow(['Language Pairs Used', stats.get('lang_pairs', 0)])
-    writer.writerow([])
-    writer.writerow(['LANGUAGE PAIR STATISTICS', ''])
-    writer.writerow(['Language Pair', 'Count'])
-    for p in pair_breakdown:
-        writer.writerow([p['pair'], p['count']])
-    writer.writerow([])
-    writer.writerow(['DAILY TRANSLATION COUNTS', ''])
-    writer.writerow(['Date', 'Translations', 'Words'])
-    for d in daily_counts:
-        writer.writerow([d['day'], d['count'], d['words']])
-    writer.writerow([])
-    writer.writerow(['USER ACTIVITY SUMMARY', ''])
-    writer.writerow(['Username', 'Translations', 'Words'])
-    for u in user_activity:
-        writer.writerow([u['username'], u['count'], u['words']])
-    writer.writerow([])
-    writer.writerow(['TRANSLATION DETAILS', ''])
-    writer.writerow(['ID', 'Username', 'Source Lang', 'Target Lang', 'Filename', 'File Type', 'File Size (Bytes)', 'Word Count', 'Status', 'Processing Time (s)', 'Engine', 'Translated At'])
-    for r in rows:
-        writer.writerow([r['id'], r['username'], r['source_language'], r['target_language'], r['filename'], r['file_type'], r['file_size'], r['word_count'], r['status'], r['processing_time'], r['engine'], str(r['translated_at'])])
+    # Fetch branding logo
+    logo_filename = get_setting('LOGO_PATH', 'prodapt_logo.png')
+    logo_path = os.path.join(app.root_path, 'static', logo_filename)
 
-    csv_data = output.getvalue()
-    mem_file = io.BytesIO()
-    mem_file.write(csv_data.encode('utf-8-sig'))  # UTF-8 BOM for Excel compatibility
-    mem_file.seek(0)
-    return send_file(mem_file, mimetype='text/csv', as_attachment=True, download_name=report_name)
+    # Package as ZIP
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        zip_file.writestr(report_filename, report_content)
+        if os.path.exists(logo_path):
+            try:
+                zip_file.write(logo_path, logo_filename)
+            except Exception:
+                pass
+    zip_buffer.seek(0)
+    return send_file(zip_buffer, mimetype='application/zip', as_attachment=True, download_name=f"DocTranslate_Report_{datetime.utcnow().strftime('%Y%m%d')}_{output_format}.zip")
 
 @app.route('/analytics/export/pdf', methods=['GET'])
 @login_required
@@ -1486,117 +1926,240 @@ def export_analytics_pdf():
         return "Unauthorized", 403
 
     from_date_raw = request.args.get('from_date', '')
-    to_date_raw = request.args.get('to_date', '')
-    query = "SELECT username, source_language, target_language, filename, file_type, word_count, processing_time, engine, translated_at FROM translations"
-    params = []
+    to_date_raw   = request.args.get('to_date', '')
     filters = []
+    params  = []
 
     try:
         if from_date_raw:
-            from_date = datetime.strptime(from_date_raw, '%Y-%m-%d')
             filters.append('translated_at >= %s')
-            params.append(from_date.strftime('%Y-%m-%d 00:00:00'))
+            params.append(datetime.strptime(from_date_raw, '%Y-%m-%d').strftime('%Y-%m-%d 00:00:00'))
         if to_date_raw:
-            to_date = datetime.strptime(to_date_raw, '%Y-%m-%d')
             filters.append('translated_at <= %s')
-            params.append(to_date.strftime('%Y-%m-%d 23:59:59'))
+            params.append(datetime.strptime(to_date_raw, '%Y-%m-%d').strftime('%Y-%m-%d 23:59:59'))
     except ValueError:
         return "Invalid date filter format. Use YYYY-MM-DD.", 400
 
-    if filters:
-        query += ' WHERE ' + ' AND '.join(filters)
-    query += ' ORDER BY translated_at DESC LIMIT 1000'
+    where_clause = (' WHERE ' + ' AND '.join(filters)) if filters else ''
 
-    conn = get_db_connection()
+    conn   = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(query, params)
-    rows = cursor.fetchall()
 
-    cursor.execute("SELECT COUNT(*) as total_translations, COALESCE(SUM(word_count),0) as total_words, COALESCE(AVG(file_size),0) as avg_file_size FROM translations" + ((' WHERE ' + ' AND '.join(filters)) if filters else ''), params)
+    # Full-dataset summary stats (no row limit)
+    cursor.execute(
+        f"SELECT COUNT(*) as total_translations, COALESCE(SUM(word_count),0) as total_words, "
+        f"COALESCE(AVG(file_size),0) as avg_file_size FROM translations{where_clause}", params)
     stats = cursor.fetchone()
-    cursor.execute("SELECT source_language, target_language, COUNT(*) as count FROM translations" + ((' WHERE ' + ' AND '.join(filters)) if filters else '') + " GROUP BY source_language, target_language ORDER BY count DESC LIMIT 5", params)
-    pair_stats = cursor.fetchall()
-    cursor.execute("SELECT username, COUNT(*) as count, COALESCE(SUM(word_count),0) as words FROM translations" + ((' WHERE ' + ' AND '.join(filters)) if filters else '') + " GROUP BY username ORDER BY count DESC LIMIT 5", params)
-    user_stats = cursor.fetchall()
-    cursor.execute("SELECT DATE_FORMAT(translated_at, '%%m-%%d') as day, COUNT(*) as count FROM translations" + ((' WHERE ' + ' AND '.join(filters)) if filters else '') + " GROUP BY day ORDER BY MIN(translated_at) DESC LIMIT 7", params)
+
+    # Files translated
+    cursor.execute(
+        f"SELECT COUNT(*) as files_translated FROM translations "
+        f"{where_clause if where_clause else ' WHERE '} "
+        f"{' AND ' if where_clause else ''} filename IS NOT NULL AND filename != 'Text Box Input' AND filename != 'Text Input'", params)
+    files_translated = cursor.fetchone()["files_translated"]
+
+    # Most common direction
+    cursor.execute(
+        f"SELECT CONCAT(source_language,' -> ',target_language) as direction, COUNT(*) as cnt "
+        f"FROM translations{where_clause} GROUP BY source_language, target_language "
+        f"ORDER BY cnt DESC LIMIT 1", params)
+    common_dir_row = cursor.fetchone()
+    common_direction = common_dir_row['direction'] if common_dir_row else 'N/A'
+
+    # 7-day activity trend
+    cursor.execute(
+        f"SELECT DATE_FORMAT(translated_at,'%%Y-%%m-%%d') as day, COUNT(*) as count "
+        f"FROM translations{where_clause} GROUP BY day ORDER BY day DESC LIMIT 7", params)
     daily_stats = cursor.fetchall()
+
+    # Read safe limits
+    pdf_max_rows = int(get_setting('PDF_MAX_ROWS', '1000'))
+    pdf_max_days = int(get_setting('PDF_MAX_DAYS', '90'))
+
+    # Fetch rows with safe limits
+    details_filters = list(filters)
+    details_params = list(params)
+    details_filters.append("translated_at >= DATE_SUB(NOW(), INTERVAL %s DAY)")
+    details_params.append(pdf_max_days)
+
+    details_where = ' WHERE ' + ' AND '.join(details_filters)
+    details_query = (
+        f"SELECT DATE_FORMAT(translated_at, '%%Y-%%m-%%d %%H:%%i') as date_str, "
+        f"username, source_language, target_language, filename, word_count, status "
+        f"FROM translations{details_where} ORDER BY translated_at DESC LIMIT %s"
+    )
+    details_params.append(pdf_max_rows)
+    cursor.execute(details_query, tuple(details_params))
+    rows = cursor.fetchall()
     conn.close()
 
     from reportlab.lib.pagesizes import letter
-    from reportlab.pdfgen import canvas
-    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib import colors
 
     buffer = io.BytesIO()
-    pdf = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        leftMargin=36,
+        rightMargin=36,
+        topMargin=36,
+        bottomMargin=54
+    )
 
-    pdf.setTitle('DocTranslate Usage Report')
-    pdf.setFont('Helvetica-Bold', 18)
-    pdf.drawString(50, height - 60, 'DocTranslate Usage Report')
-    pdf.setFont('Helvetica', 10)
-    pdf.drawString(50, height - 80, f'Report Period: {from_date_raw or "All time"} to {to_date_raw or "All time"}')
-    pdf.drawString(50, height - 95, f'Generated: {datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")}')
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle(
+        'DocTitle',
+        parent=styles['Heading2'],
+        fontName='Helvetica-Bold',
+        fontSize=18,
+        textColor=colors.HexColor('#0f172a'),
+        alignment=1,
+        spaceAfter=12
+    )
+    meta_style = ParagraphStyle(
+        'DocMeta',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=10,
+        textColor=colors.HexColor('#475569'),
+        alignment=1,
+        spaceAfter=6
+    )
+    section_style = ParagraphStyle(
+        'DocSection',
+        parent=styles['Heading3'],
+        fontName='Helvetica-Bold',
+        fontSize=12,
+        textColor=colors.HexColor('#0f172a'),
+        spaceBefore=12,
+        spaceAfter=6
+    )
+    footnote_style = ParagraphStyle(
+        'DocFootnote',
+        parent=styles['Normal'],
+        fontName='Helvetica-Oblique',
+        fontSize=8,
+        textColor=colors.HexColor('#64748b'),
+        spaceBefore=10
+    )
 
-    pdf.setFillColor(colors.HexColor('#0f172a'))
-    pdf.setFont('Helvetica-Bold', 12)
-    pdf.drawString(50, height - 125, 'Summary Metrics')
-    pdf.setFont('Helvetica', 10)
-    summary_y = height - 145
-    pdf.drawString(60, summary_y, f'Total translations: {stats["total_translations"]}')
-    pdf.drawString(250, summary_y, f'Total words processed: {stats["total_words"]}')
-    pdf.drawString(60, summary_y - 16, f'Average file size: {round(float(stats["avg_file_size"] or 0),1)} bytes')
-    pdf.drawString(250, summary_y - 16, f'Files translated: {len(rows)}')
+    story = []
 
-    pdf.setFont('Helvetica-Bold', 12)
-    pdf.drawString(50, summary_y - 50, 'Top Language Pairs')
-    pdf.setFont('Helvetica', 10)
-    y = summary_y - 70
-    for pair in pair_stats:
-        pdf.drawString(60, y, f'{pair["source_language"]} → {pair["target_language"]}: {pair["count"]}')
-        y -= 14
+    # Center horizontal branding logo
+    logo_filename = get_setting('LOGO_PATH', 'prodapt_logo.png')
+    logo_path = os.path.join(app.root_path, 'static', logo_filename)
+    if os.path.exists(logo_path):
+        try:
+            logo_img = Image(logo_path, width=150, height=50)
+            logo_img.hAlign = 'CENTER'
+            story.append(logo_img)
+        except Exception:
+            logo_text = ParagraphStyle('LogoText', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=26, textColor=colors.HexColor('#DC2626'), alignment=1)
+            story.append(Paragraph("PRODAPT", logo_text))
+    else:
+        logo_text = ParagraphStyle('LogoText', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=26, textColor=colors.HexColor('#DC2626'), alignment=1)
+        story.append(Paragraph("PRODAPT", logo_text))
 
-    pdf.setFont('Helvetica-Bold', 12)
-    pdf.drawString(50, y - 10, 'Top Users')
-    pdf.setFont('Helvetica', 10)
-    y -= 30
-    for user in user_stats:
-        pdf.drawString(60, y, f'{user["username"]}: {user["count"]} translations, {user["words"]} words')
-        y -= 14
+    story.append(Spacer(1, 10))
+    story.append(Paragraph("Translation Analytics Report", title_style))
 
-    y -= 20
-    pdf.setFont('Helvetica-Bold', 12)
-    pdf.drawString(50, y, 'Daily Translation Counts')
-    y -= 18
-    pdf.setFont('Helvetica', 10)
-    for day in daily_stats:
-        pdf.drawString(60, y, f'{day["day"]}: {day["count"]}')
-        y -= 14
+    now_str = datetime.now().strftime("%d-%m-%Y %H:%M")
+    period_str = f"Period: {from_date_raw or 'Start'} to {to_date_raw or 'End'}"
+    if not from_date_raw and not to_date_raw:
+        period_str = "Period: All Time"
+    generated_by = f"Generated By: {session.get('username', 'System')}"
 
-    y -= 30
-    pdf.setFont('Helvetica-Bold', 12)
-    pdf.drawString(50, y, 'Recent Translation Activity')
-    y -= 18
-    pdf.setFont('Helvetica', 9)
-    pdf.drawString(50, y, 'Username')
-    pdf.drawString(150, y, 'File')
-    pdf.drawString(340, y, 'Words')
-    pdf.drawString(400, y, 'Engine')
-    pdf.drawString(470, y, 'Date')
-    y -= 14
-    for row in rows[:12]:
-        if y < 80:
-            pdf.showPage()
-            y = height - 60
-        pdf.drawString(50, y, str(row['username']))
-        pdf.drawString(150, y, str(row['filename'])[:25])
-        pdf.drawString(340, y, str(row['word_count']))
-        pdf.drawString(400, y, str(row['engine']))
-        pdf.drawString(470, y, str(row['translated_at'])[:10])
-        y -= 14
+    story.append(Paragraph(f"Generated On: {now_str}", meta_style))
+    story.append(Paragraph(period_str, meta_style))
+    story.append(Paragraph(generated_by, meta_style))
+    story.append(Spacer(1, 15))
 
-    pdf.showPage()
-    pdf.save()
+    # Summary table
+    metrics_data = [
+        [Paragraph("<b>Metric</b>", styles['Normal']), Paragraph("<b>Value</b>", styles['Normal'])],
+        ["Total Translations", f"{stats['total_translations']:,}"],
+        ["Total Words Processed", f"{stats['total_words']:,}"],
+        ["Files Translated", f"{files_translated:,}"],
+        ["Average File Size", f"{round(float(stats['avg_file_size'] or 0) / 1024, 2):,} KB"],
+        ["Most Common Direction", common_direction]
+    ]
+    metrics_table = Table(metrics_data, colWidths=[200, 200])
+    metrics_table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#f1f5f9')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.HexColor('#0f172a')),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('BOTTOMPADDING', (0,0), (-1,0), 6),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
+        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f8fafc')])
+    ]))
+    story.append(Paragraph("Summary Metrics", section_style))
+    story.append(metrics_table)
+    story.append(Spacer(1, 15))
+
+    # Activity trends table
+    trend_data = [[Paragraph("<b>Date</b>", styles['Normal']), Paragraph("<b>Translations Count</b>", styles['Normal'])]]
+    for d in daily_stats:
+        trend_data.append([d['day'], str(d['count'])])
+    trend_table = Table(trend_data, colWidths=[200, 200])
+    trend_table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#f1f5f9')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.HexColor('#0f172a')),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('BOTTOMPADDING', (0,0), (-1,0), 6),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
+        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f8fafc')])
+    ]))
+    story.append(Paragraph("Translation Activity Trends (Last 7 Days)", section_style))
+    story.append(trend_table)
+    story.append(Spacer(1, 15))
+
+    # Detailed table
+    detail_data = [[
+        "Date",
+        "User",
+        "Source",
+        "Target",
+        "File Name",
+        "Words",
+        "Status"
+    ]]
+    for r in rows:
+        detail_data.append([
+            r['date_str'],
+            r['username'],
+            r['source_language'],
+            r['target_language'],
+            str(r['filename'])[:24],
+            f"{r['word_count']:,}",
+            r['status']
+        ])
+    detail_table = Table(detail_data, colWidths=[85, 55, 45, 45, 150, 50, 60])
+    detail_table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0f172a')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('BOTTOMPADDING', (0,0), (-1,0), 5),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
+        ('FONTSIZE', (0,0), (-1,-1), 8),
+        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f8fafc')])
+    ]))
+    story.append(Paragraph("Recent Translation Activity", section_style))
+    story.append(detail_table)
+    story.append(Paragraph(f"* Note: Detailed activity rows are capped to a maximum of last {pdf_max_rows} records or {pdf_max_days} days (whichever is smaller) for performance safety.", footnote_style))
+
+    def draw_page_decorations(canvas_obj, doc):
+        canvas_obj.saveState()
+        canvas_obj.setFont('Helvetica', 8)
+        canvas_obj.setFillColor(colors.HexColor('#64748b'))
+        canvas_obj.drawString(36, 20, "DocTranslate Enterprise - Confidential")
+        canvas_obj.drawRightString(612 - 36, 20, f"Page {doc.page}")
+        canvas_obj.restoreState()
+
+    doc.build(story, onFirstPage=draw_page_decorations, onLaterPages=draw_page_decorations)
     buffer.seek(0)
     return send_file(buffer, mimetype='application/pdf', as_attachment=True, download_name=f"DocTranslate_Report_{datetime.utcnow().strftime('%Y%m%d')}.pdf")
 

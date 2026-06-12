@@ -16,6 +16,13 @@ from io import BytesIO
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Fix console encoding on Windows to prevent UnicodeEncodeError for checkmark emoji
+try:
+    import sys
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+
 class DocTranslateImplementationTests(unittest.TestCase):
     """Test suite for DocTranslate Enterprise implementation"""
     
@@ -146,7 +153,7 @@ class DocTranslateImplementationTests(unittest.TestCase):
         
         required_tables = [
             'users', 'translations', 'glossary', 'audit_logs', 
-            'settings', 'batch_jobs'
+            'app_settings', 'batch_jobs'
         ]
         
         cursor.execute("SHOW TABLES")
