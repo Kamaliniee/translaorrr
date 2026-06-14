@@ -1,1 +1,4 @@
-Empleado John Doe tiene a actual salario of $120,000 por año. Su principal contacto correo electrónico es john.doe@company.com y su teléfono es 555-123-4567. Mr. Miller revisa corporativos cumplimiento archivos para empleados con ID números como 123-45-6789. Por Favor ejecute esto auditoría bajo nuestro canales de inmediato.
+El empleado John Doe tiene un salario actual de $120,000 per annum.
+Su correo electrónico de contacto principal es john.doe@company.com y su teléfono es 555-123-4567.
+Mr. Miller revisa los archivos de cumplimiento corporativo de los empleados con números de identificación como 123-45-6789.
+Ejecute esta auditoría en nuestras tuberías de inmediato.

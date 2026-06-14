@@ -175,18 +175,35 @@ def translate_file(input_path, output_path, direction, engine, department, gloss
                     translated, word_count, masked_count, glossary_count, confidence, _, cost_val = translate_text(
                         all_text, direction, engine, department, glossary_rules, custom_words
                     )
+                    
+                    # Create a clean ReportLab PDF with the translated text
+                    from reportlab.lib.pagesizes import letter
+                    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+                    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+                    
+                    doc = SimpleDocTemplate(output_path, pagesize=letter)
+                    styles = getSampleStyleSheet()
+                    
+                    body_style = ParagraphStyle(
+                        'TranslatedBody',
+                        parent=styles['Normal'],
+                        fontName='Helvetica',
+                        fontSize=10,
+                        leading=14,
+                        spaceAfter=8
+                    )
+                    
+                    story = []
+                    lines = translated.split('\n')
+                    for line in lines:
+                        if line.strip():
+                            story.append(Paragraph(line.strip(), body_style))
+                        else:
+                            story.append(Spacer(1, 10))
+                    
+                    doc.build(story)
                 else:
-                    translated = all_text
-                
-                # Create new PDF with translated text
-                pdf_writer = PdfWriter()
-                
-                # Copy pages and add translated text as overlay
-                for page_num, page in enumerate(pdf_reader.pages):
-                    pdf_writer.add_page(page)
-                
-                with open(output_path, 'wb') as output_file:
-                    pdf_writer.write(output_file)
+                    shutil.copy(input_path, output_path)
                     
             except Exception as e:
                 print(f"Error processing PDF {input_path}: {e}")
