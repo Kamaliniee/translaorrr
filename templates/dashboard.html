@@ -725,6 +725,55 @@
             <div class="text-muted small text-center p-4">No batch items selected or active in queue. Select files on the left to start.</div>
           </div>
           
+          <!-- Batch Summary Card -->
+          <div id="batchSummaryContainer" style="display:none; background:#ffffff; padding:20px; border-radius:12px; border:1px solid var(--border); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);" class="mt-3">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <strong style="font-size:14px; color: var(--primary);"><i class="bi bi-patch-check-fill"></i> Batch Translation Job Summary</strong>
+              <button type="button" class="btn btn-xs btn-outline-danger font-bold" onclick="clearBatchSummary()">Clear Results</button>
+            </div>
+            <div class="row g-2 mb-3">
+              <div class="col-6 col-md-4">
+                <div class="p-2 border rounded text-center" style="background:#f8fafc;">
+                  <div class="text-muted small" style="font-size:10px;">Total Files</div>
+                  <div class="font-bold fs-5" id="summaryTotal">0</div>
+                </div>
+              </div>
+              <div class="col-6 col-md-4">
+                <div class="p-2 border rounded text-center text-success" style="background:#f0fdf4;">
+                  <div class="text-muted small" style="font-size:10px;">Successful</div>
+                  <div class="font-bold fs-5" id="summarySuccessful">0</div>
+                </div>
+              </div>
+              <div class="col-6 col-md-4">
+                <div class="p-2 border rounded text-center text-danger" style="background:#fef2f2;">
+                  <div class="text-muted small" style="font-size:10px;">Failed</div>
+                  <div class="font-bold fs-5" id="summaryFailed">0</div>
+                </div>
+              </div>
+              <div class="col-6 col-md-4">
+                <div class="p-2 border rounded text-center text-warning" style="background:#fffbeb;">
+                  <div class="text-muted small" style="font-size:10px;">Empty (Skipped)</div>
+                  <div class="font-bold fs-5" id="summaryEmpty">0</div>
+                </div>
+              </div>
+              <div class="col-6 col-md-4">
+                <div class="p-2 border rounded text-center" style="background:#f8fafc;">
+                  <div class="text-muted small" style="font-size:10px;">Duration</div>
+                  <div class="font-bold fs-5" id="summaryDuration">0.0s</div>
+                </div>
+              </div>
+              <div class="col-6 col-md-4">
+                <div class="p-2 border rounded text-center" style="background:#f8fafc;">
+                  <div class="text-muted small" style="font-size:10px;">Engine Used</div>
+                  <div class="font-bold fs-6 mt-1 text-uppercase text-truncate" id="summaryEngine">Google</div>
+                </div>
+              </div>
+            </div>
+            <div class="d-grid mt-2">
+              <a href="#" id="batchSummaryDownloadLink" class="btn btn-success font-bold"><i class="bi bi-file-zip-fill"></i> Download Completed Zipped Results</a>
+            </div>
+          </div>
+          
           <div id="batchDownloadArea" style="display:none;" class="mt-3">
             <a href="#" id="batchDownloadLink" class="btn btn-success w-100 font-bold"><i class="bi bi-file-zip-fill"></i> Download Completed Zipped Results</a>
           </div>
@@ -1618,6 +1667,76 @@
     }
   };
 
+  let fileCustomTerms = [];
+  let activeFileIdx = null;
+
+  function openConfigureTermsModal(idx) {
+    const files = batchFileInput.files;
+    if (!files || !files[idx]) return;
+    
+    activeFileIdx = idx;
+    document.getElementById('modalFileName').textContent = files[idx].name;
+    document.getElementById('modalTermsTextarea').value = fileCustomTerms[idx] || '';
+    document.getElementById('modalFileIdx').value = idx;
+    
+    const modalEl = document.getElementById('configureTermsModal');
+    let modal = bootstrap.Modal.getInstance(modalEl);
+    if (!modal) {
+      modal = new bootstrap.Modal(modalEl);
+    }
+    modal.show();
+  }
+
+  function saveConfigureTerms() {
+    const idx = parseInt(document.getElementById('modalFileIdx').value);
+    const text = document.getElementById('modalTermsTextarea').value;
+    
+    fileCustomTerms[idx] = text;
+    
+    const badgeSpan = document.getElementById(`badgeTerms_${idx}`);
+    if (badgeSpan) {
+      if (text.trim().length > 0) {
+        badgeSpan.innerHTML = `<span class="badge bg-success ms-2">Glossary Terms Configured</span>`;
+      } else {
+        badgeSpan.innerHTML = '';
+      }
+    }
+    
+    const modalEl = document.getElementById('configureTermsModal');
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    if (modal) modal.hide();
+    
+    addNotification(`Configured translation terms for file: ${batchFileInput.files[idx].name}`, 'success');
+  }
+
+  function renderBatchSummary(summaryObj) {
+    document.getElementById('summaryTotal').textContent = summaryObj.total_files;
+    document.getElementById('summarySuccessful').textContent = summaryObj.successful_files;
+    document.getElementById('summaryFailed').textContent = summaryObj.failed_files;
+    document.getElementById('summaryEmpty').textContent = summaryObj.empty_files;
+    document.getElementById('summaryDuration').textContent = `${summaryObj.duration_seconds}s`;
+    document.getElementById('summaryEngine').textContent = summaryObj.engine;
+    
+    const downloadLink = document.getElementById('batchSummaryDownloadLink');
+    downloadLink.href = `/download-batch/${summaryObj.job_id}`;
+    downloadLink.onclick = () => {
+      setTimeout(() => {
+        clearBatchSummary();
+      }, 1000);
+    };
+    
+    document.getElementById('batchSummaryContainer').style.display = 'block';
+  }
+
+  function clearBatchSummary() {
+    localStorage.removeItem('lastCompletedBatchJobSummary');
+    document.getElementById('batchSummaryContainer').style.display = 'none';
+    const batchDownloadArea = document.getElementById('batchDownloadArea');
+    if (batchDownloadArea) {
+      batchDownloadArea.style.display = 'none';
+    }
+  }
+
   function updateBatchQueueUI() {
     const queue = document.getElementById('batchFileQueue');
     queue.innerHTML = '';
@@ -1625,26 +1744,38 @@
     
     if (files.length === 0) {
       queue.innerHTML = '<div class="text-muted small text-center p-4">No batch items selected.</div>';
+      fileCustomTerms = [];
       return;
     }
+    
+    fileCustomTerms = Array.from(files).map((_, i) => fileCustomTerms[i] || '');
     
     batchDropLabel.innerHTML = `📂 <span class="text-primary font-bold">${files.length} documents</span> selected`;
     
     Array.from(files).forEach((file, idx) => {
+      const hasTerms = fileCustomTerms[idx] && fileCustomTerms[idx].trim().length > 0;
+      const termBadge = hasTerms ? `<span class="badge bg-success ms-2">Glossary Terms Configured</span>` : '';
+      
       queue.innerHTML += `
-        <div class="batch-file-row">
-          <div class="batch-file-info">
-            <i class="bi bi-file-earmark-text batch-file-icon"></i>
+        <div class="batch-file-row p-2 mb-2 border rounded d-flex align-items-center justify-content-between" style="background: #ffffff; font-size: 12px; min-height: 48px;">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-file-earmark-text text-primary" style="font-size: 18px;"></i>
             <div>
-              <div class="batch-file-name">${file.name}</div>
-              <div class="text-muted" style="font-size:10px;">${(file.size / 1024).toFixed(1)} KB</div>
+              <div class="font-bold text-truncate" style="max-width: 220px;" title="${file.name}">${file.name}</div>
+              <div class="text-muted" style="font-size:10px;">
+                ${(file.size / 1024).toFixed(1)} KB
+                <span id="badgeTerms_${idx}">${termBadge}</span>
+              </div>
             </div>
           </div>
           <div class="d-flex align-items-center gap-2">
-            <div class="batch-progress">
-              <div class="batch-progress-bar" id="fileProgress_${idx}"></div>
+            <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size:11px;" onclick="openConfigureTermsModal(${idx})">
+              <i class="bi bi-gear"></i> Configure Terms
+            </button>
+            <div class="batch-progress" style="width: 60px; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
+              <div class="batch-progress-bar" id="fileProgress_${idx}" style="width: 0%; height: 100%; background: var(--primary); transition: width 0.3s;"></div>
             </div>
-            <span class="batch-file-status" id="fileStatus_${idx}">Ready</span>
+            <span class="batch-file-status text-muted font-bold" id="fileStatus_${idx}" style="font-size: 11px; min-width: 70px; text-align: right;">Ready</span>
           </div>
         </div>
       `;
@@ -1658,12 +1789,8 @@
       return;
     }
     
-    // Clear last completed batch job to hide button and prevent showing older results
+    clearBatchSummary();
     localStorage.removeItem('lastCompletedBatchJobId');
-    const batchDownloadArea = document.getElementById('batchDownloadArea');
-    if (batchDownloadArea) {
-      batchDownloadArea.style.display = 'none';
-    }
     
     const direction = document.getElementById('batchDirection').value;
     const engine = document.getElementById('batchEngine').value;
@@ -1674,8 +1801,10 @@
     formData.append('engine', engine);
     formData.append('custom_mask_words', customMaskWords);
     
-    Array.from(files).forEach(file => {
+    Array.from(files).forEach((file, idx) => {
       formData.append('documents', file);
+      const terms = fileCustomTerms[idx] || '';
+      formData.append(`custom_terms_${idx}`, terms);
     });
     
     // UI Updates
@@ -1699,7 +1828,6 @@
       }
       
       const jobId = data.job_id;
-      // Start status checking interval
       checkBatchProgress(jobId, files.length);
     });
   }
@@ -1717,6 +1845,7 @@
         for (let i = 0; i < total; i++) {
           const bar = document.getElementById(`fileProgress_${i}`);
           const lbl = document.getElementById(`fileStatus_${i}`);
+          if (!bar || !lbl) continue;
           if (i < processed) {
             bar.style.width = '100%';
             lbl.textContent = 'Completed ✅';
@@ -1740,19 +1869,22 @@
           document.getElementById('batchStatusLabel').textContent = 'Zipping and Compiling completed! 🎉';
           document.getElementById('btnStartBatch').disabled = false;
           
-          // Add completion notification
           addNotification(`Translation Completed - ${total} documents translated successfully.`, 'success');
           
-          // Save completed batch job ID to localStorage
-          localStorage.setItem('lastCompletedBatchJobId', jobId);
+          // Save completed job info
+          const summaryObj = {
+            total_files: total,
+            successful_files: statusData.successful_files || 0,
+            failed_files: statusData.failed_files || 0,
+            empty_files: statusData.empty_files || 0,
+            duration_seconds: statusData.duration_seconds || 0,
+            engine: statusData.summary ? statusData.summary.engine : 'google',
+            job_id: jobId,
+            zip_filename: statusData.zip_filename
+          };
           
-          // Display Download Link
-          document.getElementById('batchDownloadArea').style.display = 'block';
-          document.getElementById('batchDownloadLink').href = `/download-batch/${jobId}`;
-          
-          // Reload mailbox list dynamically
-
-          setTimeout(() => location.reload(), 2000);
+          localStorage.setItem('lastCompletedBatchJobSummary', JSON.stringify(summaryObj));
+          renderBatchSummary(summaryObj);
         }
       });
     }, 1500);
@@ -1841,14 +1973,24 @@
       switchTranslatorTab(activeTab);
     {% endif %}
 
-    // 2. Restore last completed batch job download link
-    const lastJobId = localStorage.getItem('lastCompletedBatchJobId');
-    if (lastJobId) {
-      const batchDownloadArea = document.getElementById('batchDownloadArea');
-      const batchDownloadLink = document.getElementById('batchDownloadLink');
-      if (batchDownloadArea && batchDownloadLink) {
-        batchDownloadArea.style.display = 'block';
-        batchDownloadLink.href = `/download-batch/${lastJobId}`;
+    // 2. Restore last completed batch job summary
+    const savedSummary = localStorage.getItem('lastCompletedBatchJobSummary');
+    if (savedSummary) {
+      try {
+        const summaryObj = JSON.parse(savedSummary);
+        renderBatchSummary(summaryObj);
+      } catch (e) {
+        console.error('Failed to parse saved batch summary', e);
+      }
+    } else {
+      const lastJobId = localStorage.getItem('lastCompletedBatchJobId');
+      if (lastJobId) {
+        const batchDownloadArea = document.getElementById('batchDownloadArea');
+        const batchDownloadLink = document.getElementById('batchDownloadLink');
+        if (batchDownloadArea && batchDownloadLink) {
+          batchDownloadArea.style.display = 'block';
+          batchDownloadLink.href = `/download-batch/${lastJobId}`;
+        }
       }
     }
 
@@ -2166,6 +2308,30 @@
 
   });
 </script>
+
+<!-- Per-File Custom Glossary Terms Modal -->
+<div class="modal fade" id="configureTermsModal" tabindex="-1" aria-labelledby="configureTermsModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title font-bold" id="configureTermsModalLabel"><i class="bi bi-gear-fill text-primary"></i> Configure Per-File Glossary Terms</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small">Configure custom translation rules for the file <strong id="modalFileName">file.txt</strong>. Enter one term pair per line using <code>source -> target</code>, <code>source = target</code>, or <code>source : target</code> format.</p>
+        <div class="mb-3">
+          <label for="modalTermsTextarea" class="form-label font-bold small">Custom Rules (e.g. Manager -> Gerente)</label>
+          <textarea class="form-control" id="modalTermsTextarea" rows="6" placeholder="Manager -> Gerente&#10;WebLogic -> WebLogic&#10;John = Juan" style="font-family: monospace; font-size: 13px;"></textarea>
+        </div>
+        <input type="hidden" id="modalFileIdx" value="">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-primary" onclick="saveConfigureTerms()">Save Configuration</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>

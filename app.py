@@ -20,7 +20,7 @@ load_dotenv()
 
 # Import Services
 from services.translatorr import translate_text, get_engine_display_name, check_api_connections
-from services.filehandler import translate_file
+from services.filehandler import translate_file, check_translatable_content
 from services.audit_service import log_action, get_audit_logs, export_audit_csv, log_login_event
 from services.glossary import get_glossary_rules
 
@@ -571,6 +571,26 @@ def get_current_user():
     }
 
 # --- Batch Translation Background Thread ---
+def parse_custom_terms(custom_terms_raw):
+    rules = []
+    if not custom_terms_raw:
+        return rules
+    for line in custom_terms_raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = None
+        for sep in ('->', '=', ':'):
+            if sep in line:
+                parts = line.split(sep, 1)
+                break
+        if parts:
+            src = parts[0].strip()
+            tgt = parts[1].strip()
+            if src:
+                rules.append({'source_term': src, 'target_term': tgt})
+    return rules
+
 def process_batch_job(job_id, files_list, direction, engine, department, username, role, glossary_rules, custom_words=None):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -585,19 +605,40 @@ def process_batch_job(job_id, files_list, direction, engine, department, usernam
     total_glossary = 0
     total_cost = 0.0
     
+    successful_files_count = 0
+    failed_files_count = 0
+    empty_files_count = 0
+    job_start_time = time.perf_counter()
+    
     cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
     user_record = cursor.fetchone()
     user_id = user_record['id'] if user_record else None
     
-    for idx, (original_filename, temp_filepath) in enumerate(files_list):
+    for idx, (original_filename, temp_filepath, custom_terms_raw) in enumerate(files_list):
         safe_name = secure_filename(original_filename)
         output_filepath = os.path.join(job_dir, f"translated_{safe_name}")
         
         start_time = time.perf_counter()
         try:
+            # Check translatable content
+            from services.filehandler import check_translatable_content
+            is_valid, err_msg = check_translatable_content(temp_filepath)
+            if not is_valid:
+                empty_files_count += 1
+                cursor.execute(
+                    "UPDATE batch_jobs SET processed_files = processed_files + 1 WHERE id = %s",
+                    (job_id,)
+                )
+                conn.commit()
+                continue
+            
+            # Parse and merge glossary rules
+            file_custom_rules = parse_custom_terms(custom_terms_raw)
+            merged_glossary = file_custom_rules + glossary_rules
+            
             # Dispatch to appropriate parser
             p_words, p_masked, p_glossary, p_confidence, p_cost = translate_file(
-                temp_filepath, output_filepath, direction, engine, department, glossary_rules, custom_words
+                temp_filepath, output_filepath, direction, engine, department, merged_glossary, custom_words
             )
             
             translated_paths.append((original_filename, output_filepath))
@@ -605,6 +646,7 @@ def process_batch_job(job_id, files_list, direction, engine, department, usernam
             total_masked += p_masked
             total_glossary += p_glossary
             total_cost += p_cost
+            successful_files_count += 1
 
             processing_time = round(time.perf_counter() - start_time, 3)
             source_language, target_language = parse_direction(direction)
@@ -631,6 +673,7 @@ def process_batch_job(job_id, files_list, direction, engine, department, usernam
             
         except Exception as e:
             print(f"Error in batch translating {original_filename}: {e}")
+            failed_files_count += 1
             
         # Increment progress in DB
         cursor.execute(
@@ -644,8 +687,16 @@ def process_batch_job(job_id, files_list, direction, engine, department, usernam
     zip_filepath = os.path.join(BATCH_FOLDER, zip_filename)
     
     with zipfile.ZipFile(zip_filepath, 'w') as zipf:
-        for orig_name, translated_path in translated_paths:
-            zipf.write(translated_path, f"translated_{orig_name}")
+        if not translated_paths:
+            # Write a placeholder file if all files in the batch are skipped/failed
+            placeholder_content = "All files in this batch translation job were empty, skipped, or failed to translate."
+            placeholder_path = os.path.join(job_dir, "no_files_translated.txt")
+            with open(placeholder_path, 'w', encoding='utf-8') as pf:
+                pf.write(placeholder_content)
+            zipf.write(placeholder_path, "no_files_translated.txt")
+        else:
+            for orig_name, translated_path in translated_paths:
+                zipf.write(translated_path, f"translated_{orig_name}")
             
     # Mark batch job complete
     cursor.execute(
@@ -660,6 +711,26 @@ def process_batch_job(job_id, files_list, direction, engine, department, usernam
     
     conn.commit()
     
+    # Write summary JSON metrics
+    import json
+    duration = round(time.perf_counter() - job_start_time, 2)
+    summary_data = {
+        'total_files': len(files_list),
+        'successful_files': successful_files_count,
+        'failed_files': failed_files_count,
+        'empty_files': empty_files_count,
+        'duration_seconds': duration,
+        'engine': engine,
+        'direction': direction,
+        'zip_filename': zip_filename
+    }
+    summary_path = os.path.join(job_dir, 'summary.json')
+    try:
+        with open(summary_path, 'w', encoding='utf-8') as sf:
+            json.dump(summary_data, sf, indent=4)
+    except Exception as e:
+        print(f"Error saving summary.json: {e}")
+        
     # Get user email
     cursor.execute("SELECT email FROM users WHERE username = %s", (username,))
     user_row = cursor.fetchone()
@@ -667,7 +738,7 @@ def process_batch_job(job_id, files_list, direction, engine, department, usernam
     conn.close()
     
     # Dispatch Email notification to employee
-    download_url = f"http://127.0.0.1:5000/download-batch/{job_id}"
+    download_url = f"http://127.0.0.1:8082/download-batch/{job_id}"
     subject = f"✅ Batch translation job complete! ({len(files_list)} files)"
     html_body = f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px; border: 1.5px solid #dc2626; border-radius: 12px; padding: 24px; color: #1e293b;">
@@ -1147,49 +1218,58 @@ def dashboard():
                 file.save(temp_in)
                 file_size_bytes = os.path.getsize(temp_in)
                 
-                try:
-                    start_time = time.perf_counter()
-                    p_words, p_masked, p_glossary, p_confidence, p_cost = translate_file(
-                        temp_in, temp_out, direction, selected_engine, 'general', glossary_rules, custom_words
-                    )
-                    processing_time = round(time.perf_counter() - start_time, 3)
-                    
-                    ext = os.path.splitext(safe_name)[1].lower()
-                    if ext in ('.txt', '.csv'):
-                        with open(temp_out, 'r', encoding='utf-8', errors='ignore') as preview_f:
-                            translated = preview_f.read(10000)
-                    else:
-                        translated = f"Format-preserved {ext.upper()} translation complete. File is ready for download."
-                    
-                    total_words = p_words
-                    masked_words = p_masked
-                    glossary_words = p_glossary
-                    confidence_score = p_confidence
-                    cost = p_cost
-                    
-                    source_language, target_language = parse_direction(direction)
-                    record_translation(
-                        conn,
-                        user_id,
-                        username,
-                        source_language,
-                        target_language,
-                        filename_used,
-                        ext.lstrip('.') or 'unknown',
-                        file_size_bytes,
-                        p_words,
-                        'Completed',
-                        processing_time,
-                        None,
-                        selected_engine,
-                        p_confidence,
-                        p_cost
-                    )
+                is_valid, err_msg = check_translatable_content(temp_in)
+                if not is_valid:
+                    error = err_msg
+                    try:
+                        os.remove(temp_in)
+                    except Exception:
+                        pass
+                
+                if not error:
+                    try:
+                        start_time = time.perf_counter()
+                        p_words, p_masked, p_glossary, p_confidence, p_cost = translate_file(
+                            temp_in, temp_out, direction, selected_engine, 'general', glossary_rules, custom_words
+                        )
+                        processing_time = round(time.perf_counter() - start_time, 3)
+                        
+                        ext = os.path.splitext(safe_name)[1].lower()
+                        if ext in ('.txt', '.csv'):
+                            with open(temp_out, 'r', encoding='utf-8', errors='ignore') as preview_f:
+                                translated = preview_f.read(10000)
+                        else:
+                            translated = f"Format-preserved {ext.upper()} translation complete. File is ready for download."
+                        
+                        total_words = p_words
+                        masked_words = p_masked
+                        glossary_words = p_glossary
+                        confidence_score = p_confidence
+                        cost = p_cost
+                        
+                        source_language, target_language = parse_direction(direction)
+                        record_translation(
+                            conn,
+                            user_id,
+                            username,
+                            source_language,
+                            target_language,
+                            filename_used,
+                            ext.lstrip('.') or 'unknown',
+                            file_size_bytes,
+                            p_words,
+                            'Completed',
+                            processing_time,
+                            None,
+                            selected_engine,
+                            p_confidence,
+                            p_cost
+                        )
 
-                    log_action(conn, username, 'file_translation', f"Translated '{filename_used}' ({p_words:,} words) using {selected_engine}.")
-                except Exception as e:
-                    error = f"Translation engine failure: {e}"
-                    print(f"Translation Crash: {e}")
+                        log_action(conn, username, 'file_translation', f"Translated '{filename_used}' ({p_words:,} words) using {selected_engine}.")
+                    except Exception as e:
+                        error = f"Translation engine failure: {e}"
+                        print(f"Translation Crash: {e}")
         else:
             raw_text = request.form.get('raw_text', '').strip()
             if raw_text:
@@ -1348,12 +1428,15 @@ def translate_batch():
     job_id = str(uuid.uuid4())
     files_list = []
     
-    for file in files:
+    for idx, file in enumerate(files):
         if file and allowed_file(file.filename):
             safe_name = secure_filename(file.filename)
             temp_path = os.path.join(UPLOAD_FOLDER, f"{job_id}_{safe_name}")
             file.save(temp_path)
-            files_list.append((file.filename, temp_path))
+            
+            # Retrieve per-file custom terms
+            custom_terms_raw = request.form.get(f'custom_terms_{idx}', '').strip()
+            files_list.append((file.filename, temp_path, custom_terms_raw))
             
     if not files_list:
         return jsonify({'error': 'No supported files selected'}), 400
@@ -1396,6 +1479,27 @@ def batch_status(job_id):
     if not row:
         return jsonify({'error': 'Job not found'}), 404
         
+    job_dir = os.path.join(BATCH_FOLDER, job_id)
+    summary_path = os.path.join(job_dir, 'summary.json')
+    if os.path.exists(summary_path):
+        import json
+        try:
+            with open(summary_path, 'r', encoding='utf-8') as sf:
+                summary_data = json.load(sf)
+            return jsonify({
+                'total_files': row['total_files'],
+                'processed_files': row['processed_files'],
+                'status': row['status'],
+                'zip_filename': row['zip_filename'],
+                'successful_files': summary_data.get('successful_files', 0),
+                'failed_files': summary_data.get('failed_files', 0),
+                'empty_files': summary_data.get('empty_files', 0),
+                'duration_seconds': summary_data.get('duration_seconds', 0),
+                'summary': summary_data
+            })
+        except Exception as e:
+            print(f"Error reading summary.json: {e}")
+            
     return jsonify({
         'total_files': row['total_files'],
         'processed_files': row['processed_files'],

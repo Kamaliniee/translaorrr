@@ -12,6 +12,104 @@ from PyPDF2 import PdfReader, PdfWriter
 from io import BytesIO
 from services.translatorr import translate_text
 
+def check_translatable_content(filepath):
+    """
+    Check if the file exists, has size > 0, and contains any translatable text.
+    Returns (is_valid, error_message)
+    """
+    if not os.path.exists(filepath):
+        return False, "The selected file does not exist."
+    
+    if os.path.getsize(filepath) == 0:
+        return False, "The selected file is empty. Please upload a valid document."
+        
+    ext = os.path.splitext(filepath)[1].lower()
+    
+    if ext == '.txt':
+        try:
+            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            if not content.strip():
+                return False, "No translatable content found in the uploaded file."
+        except Exception as e:
+            return False, f"Error reading file: {e}"
+            
+    elif ext == '.csv':
+        try:
+            has_content = False
+            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    for cell in row:
+                        if cell.strip():
+                            has_content = True
+                            break
+                    if has_content:
+                        break
+            if not has_content:
+                return False, "No translatable content found in the uploaded file."
+        except Exception as e:
+            return False, f"Error reading file: {e}"
+            
+    elif ext == '.docx':
+        try:
+            has_content = False
+            doc = docx.Document(filepath)
+            for p in doc.paragraphs:
+                if p.text.strip():
+                    has_content = True
+                    break
+            if not has_content:
+                for table in doc.tables:
+                    for row in table.rows:
+                        for cell in row.cells:
+                            for p in cell.paragraphs:
+                                if p.text.strip():
+                                    has_content = True
+                                    break
+                            if has_content: break
+                        if has_content: break
+                    if has_content: break
+            if not has_content:
+                return False, "No translatable content found in the uploaded file."
+        except Exception as e:
+            return False, f"Error reading file: {e}"
+            
+    elif ext == '.xlsx':
+        try:
+            has_content = False
+            wb = openpyxl.load_workbook(filepath, read_only=True)
+            for sheet in wb.worksheets:
+                for row in sheet.iter_rows(values_only=True):
+                    for val in row:
+                        if val is not None and str(val).strip():
+                            has_content = True
+                            break
+                    if has_content:
+                        break
+                if has_content:
+                    break
+            if not has_content:
+                return False, "No translatable content found in the uploaded file."
+        except Exception as e:
+            return False, f"Error reading file: {e}"
+            
+    elif ext == '.pdf':
+        try:
+            has_content = False
+            reader = PdfReader(filepath)
+            for page in reader.pages:
+                text = page.extract_text()
+                if text and text.strip():
+                    has_content = True
+                    break
+            if not has_content:
+                return False, "No translatable content found in the uploaded file."
+        except Exception as e:
+            return False, f"Error reading file: {e}"
+            
+    return True, ""
+
 def translate_file(input_path, output_path, direction, engine, department, glossary_rules, custom_words=None):
     """File translation handler.
     Extracts text from txt, csv, docx, xlsx files, performs PII masking + translation,
