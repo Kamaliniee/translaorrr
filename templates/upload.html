@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Document Translation</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<<<<<<< HEAD
   <link href="https://db.onlinewebfonts.com/c/d29ba033bd591441ba31f6aa7054787f?family=KareliaWeb+Regular" rel="stylesheet" type="text/css"/>
   <style>
     @font-face {
@@ -44,78 +46,320 @@
     .tl-preview { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 14px; padding: 1rem; color: #374151; font-size: 14px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 1rem; max-height: 240px; overflow-y: auto; }
     .tl-btn { width: 100%; padding: 14px; border-radius: 12px; border: none; background: #dc2626; color: #ffffff; font-family: 'KareliaWeb', sans-serif; font-size: 15px; font-weight: 500; cursor: pointer; transition: background 0.18s, opacity 0.18s; display: flex; align-items: center; justify-content: center; gap: 8px; letter-spacing: 0.01em; }
     .tl-btn:hover { background: #b91c1c; }
+=======
+  <link
+    href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600&family=DM+Sans:wght@300;400;500&display=swap"
+    rel="stylesheet">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f3f4f6;
+      font-family: 'DM Sans', sans-serif;
+      padding: 2rem 1rem;
+    }
+
+    .tl-card {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 20px;
+      padding: 2.5rem 2rem;
+      width: 100%;
+      max-width: 520px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+    }
+
+    .tl-eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #9ca3af;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+    }
+
+    .tl-title {
+      font-family: 'Lora', serif;
+      font-size: 26px;
+      font-weight: 600;
+      color: #111827;
+      margin-bottom: 0.35rem;
+      line-height: 1.2;
+    }
+
+    .tl-sub {
+      font-size: 14px;
+      color: #6b7280;
+      margin-bottom: 2rem;
+    }
+
+    .tl-divider {
+      border: none;
+      border-top: 1px solid #e5e7eb;
+      margin-bottom: 1.5rem;
+    }
+
+    .tl-label {
+      font-size: 12px;
+      color: #9ca3af;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.6rem;
+    }
+
+    .tl-options {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 1.5rem;
+    }
+
+    input[type="radio"] {
+      display: none;
+    }
+
+    .tl-opt {
+      border: 1px solid #d1d5db;
+      border-radius: 12px;
+      padding: 14px 16px;
+      background: #f9fafb;
+      cursor: pointer;
+      transition: border-color 0.18s, background 0.18s;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      user-select: none;
+    }
+
+    .tl-opt:hover {
+      border-color: #9ca3af;
+      background: #ffffff;
+    }
+
+    .tl-opt-flag {
+      font-size: 18px;
+      margin-bottom: 4px;
+    }
+
+    .tl-opt-from {
+      font-size: 13px;
+      font-weight: 500;
+      color: #111827;
+    }
+
+    .tl-opt-arrow {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+
+    .tl-opt-to {
+      font-size: 13px;
+      font-weight: 500;
+      color: #111827;
+    }
+
+    .tl-selected-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #fef2f2;
+      color: #dc2626;
+      font-size: 12px;
+      font-weight: 500;
+      border-radius: 100px;
+      padding: 4px 10px;
+      margin-bottom: 1rem;
+    }
+
+    .tl-upload-zone {
+      border: 2px dashed #d1d5db;
+      border-radius: 12px;
+      padding: 2rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.18s, background 0.18s;
+      margin-bottom: 1rem;
+      position: relative;
+    }
+
+    .tl-upload-zone:hover {
+      border-color: #ef4444;
+      background: #fef2f2;
+    }
+
+    .tl-upload-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .tl-upload-icon {
+      font-size: 28px;
+      color: #9ca3af;
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .tl-upload-text {
+      font-size: 14px;
+      color: #6b7280;
+      margin-bottom: 4px;
+    }
+
+    .tl-upload-hint {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+
+    .tl-alert {
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1rem;
+    }
+
+    .tl-alert-error {
+      background: #fef2f2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+
+    .tl-alert-success {
+      background: #ecfdf5;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+
+    .tl-preview {
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 1rem;
+      color: #374151;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      margin-bottom: 1rem;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+
+    .tl-btn {
+      width: 100%;
+      padding: 14px;
+      border-radius: 12px;
+      border: none;
+      background: #dc2626;
+      color: #ffffff;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.18s, opacity 0.18s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      letter-spacing: 0.01em;
+    }
+
+    .tl-btn:hover {
+      background: #b91c1c;
+    }
+>>>>>>> 61b64a592c23534302cfe0d41441b87f8e235ebd
   </style>
 </head>
+
 <body>
 
-<div class="tl-card">
-  <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data">
-    <p class="tl-eyebrow">Document translation</p>
-    <h1 class="tl-title">Translate a file</h1>
-    <p class="tl-sub">Pick a direction, then upload your document.</p>
-    <hr class="tl-divider">
+  <div class="tl-card">
+    <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data">
+      <p class="tl-eyebrow">Document translation</p>
+      <h1 class="tl-title">Translate a file</h1>
+      <p class="tl-sub">Pick a direction, then upload your document.</p>
+      <hr class="tl-divider">
 
-    {% if error %}
+      {% if error %}
       <div class="tl-alert tl-alert-error">{{ error }}</div>
-    {% endif %}
-    {% if translated %}
-      <div class="tl-alert tl-alert-success">{{ filename }} was translated successfully.</div>
-    {% endif %}
+      {% endif %}
+      {% if translated %}
+      <div class="tl-alert tl-alert-success">
+        {{ filename }} was translated successfully.
+        {% if confidence_score is defined and confidence_score is not none %}
+        <br><span style="font-size: 13px; font-weight: 500;"><i class="bi bi-patch-check-fill"></i> Confidence Score: {{ confidence_score }}%</span>
+        {% endif %}
+      </div>
+      {% endif %}
 
-  <p class="tl-label">Translation direction</p>
-  <div class="tl-options">
-    <input type="radio" name="direction" id="opt-en-es" value="en-es" {% if direction == 'en-es' %}checked{% endif %}>
-    <label for="opt-en-es" class="tl-opt">
-      <span class="tl-opt-flag">🇺🇸</span>
-      <span class="tl-opt-from">English</span>
-      <span class="tl-opt-arrow">↓ to</span>
-      <span class="tl-opt-to">🇪🇸 Spanish</span>
-    </label>
-    <input type="radio" name="direction" id="opt-es-en" value="es-en" {% if direction == 'es-en' %}checked{% endif %}>
-    <label for="opt-es-en" class="tl-opt">
-      <span class="tl-opt-flag">🇪🇸</span>
-      <span class="tl-opt-from">Spanish</span>
-      <span class="tl-opt-arrow">↓ to</span>
-      <span class="tl-opt-to">🇺🇸 English</span>
-    </label>
-  </div>
+      <p class="tl-label">Translation direction</p>
+      <div class="tl-options">
+        <input type="radio" name="direction" id="opt-en-es" value="en-es" {% if direction=='en-es' %}checked{% endif %}>
+        <label for="opt-en-es" class="tl-opt">
+          <span class="tl-opt-flag">🇺🇸</span>
+          <span class="tl-opt-from">English</span>
+          <span class="tl-opt-arrow">↓ to</span>
+          <span class="tl-opt-to">🇪🇸 Spanish</span>
+        </label>
+        <input type="radio" name="direction" id="opt-es-en" value="es-en" {% if direction=='es-en' %}checked{% endif %}>
+        <label for="opt-es-en" class="tl-opt">
+          <span class="tl-opt-flag">🇪🇸</span>
+          <span class="tl-opt-from">Spanish</span>
+          <span class="tl-opt-arrow">↓ to</span>
+          <span class="tl-opt-to">🇺🇸 English</span>
+        </label>
+      </div>
 
-  <div class="tl-selected-badge" id="selected-badge">
-    <i class="bi bi-globe" aria-hidden="true" style="font-size:13px;"></i>
-    {{ badge_text }}
-  </div>
+      <div class="tl-selected-badge" id="selected-badge">
+        <i class="bi bi-globe" aria-hidden="true" style="font-size:13px;"></i>
+        {{ badge_text }}
+      </div>
 
-  <p class="tl-label">Upload file</p>
-  <div class="tl-upload-zone">
-    <input type="file" id="file-input" name="document" accept=".txt,.csv,.docx,.xlsx,.pdf,.doc">
-    <i class="bi bi-upload tl-upload-icon" aria-hidden="true"></i>
-    <p class="tl-upload-text">Drop your file here or <strong>browse</strong></p>
-    <p class="tl-upload-hint">TXT, CSV, DOCX, XLSX, PDF, DOC — up to 20 MB</p>
-  </div>
+      <p class="tl-label">Upload file</p>
+      <div class="tl-upload-zone">
+        <input type="file" id="file-input" name="document" accept=".txt,.csv,.docx,.xlsx,.pdf,.doc">
+        <i class="bi bi-upload tl-upload-icon" aria-hidden="true"></i>
+        <p class="tl-upload-text">Drop your file here or <strong>browse</strong></p>
+        <p class="tl-upload-hint">TXT, CSV, DOCX, XLSX, PDF, DOC — up to 20 MB</p>
+      </div>
 
-  <button type="submit" class="tl-btn"><i class="bi bi-arrow-right-circle"></i> Translate document</button>
+      <button type="submit" class="tl-btn"><i class="bi bi-arrow-right-circle"></i> Translate document</button>
 
-    {% if translated and filename %}
+      {% if translated and filename %}
       <div class="tl-preview">{{ translated }}</div>
-      <a class="tl-btn" href="{{ url_for('download_file', filename=filename) }}" style="margin-top: 0.8rem; text-decoration: none; justify-content: center;">
+      <a class="tl-btn" href="{{ url_for('download_file', filename=filename) }}"
+        style="margin-top: 0.8rem; text-decoration: none; justify-content: center;">
         <i class="bi bi-download"></i> Download translated file
       </a>
-    {% endif %}
-  </form>
-</div>
+      {% endif %}
+    </form>
+  </div>
 
-<script>
-  const badge = document.getElementById('selected-badge');
-  const optEnEs = document.getElementById('opt-en-es');
-  const optEsEn = document.getElementById('opt-es-en');
+  <script>
+    const badge = document.getElementById('selected-badge');
+    const optEnEs = document.getElementById('opt-en-es');
+    const optEsEn = document.getElementById('opt-es-en');
 
-  function updateBadge() {
-    badge.textContent = optEnEs.checked ? 'English → Spanish' : 'Spanish → English';
-  }
+    function updateBadge() {
+      badge.textContent = optEnEs.checked ? 'English → Spanish' : 'Spanish → English';
+    }
 
-  optEnEs.addEventListener('change', updateBadge);
-  optEsEn.addEventListener('change', updateBadge);
-</script>
+    optEnEs.addEventListener('change', updateBadge);
+    optEsEn.addEventListener('change', updateBadge);
+  </script>
 
 </body>
+
 </html>

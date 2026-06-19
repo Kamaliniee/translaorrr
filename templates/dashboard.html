@@ -633,8 +633,9 @@
 
               <!-- Metadata parameters -->
               <div class="row g-2 mt-3 font-bold small text-muted" style="background:#f8fafc; padding:12px; border-radius:10px; border:1px solid var(--border);">
-                <div class="col-6"><strong>Words:</strong> <span id="metaWords">0</span></div>
-                <div class="col-6"><strong>Masked:</strong> <span id="metaMasked">0</span></div>
+                <div class="col-4"><strong>Words:</strong> <span id="metaWords">0</span></div>
+                <div class="col-4"><strong>Masked:</strong> <span id="metaMasked">0</span></div>
+                <div class="col-4"><strong>Confidence:</strong> <span id="metaConfidence">0%</span></div>
               </div>
 
               <div class="d-flex gap-2 mt-3">
@@ -2094,8 +2095,19 @@
             zip_filename: statusData.zip_filename
           };
           
+<<<<<<< HEAD
           localStorage.setItem('lastCompletedBatchJobSummary', JSON.stringify(summaryObj));
           renderBatchSummary(summaryObj);
+=======
+          // Trigger download automatically
+          window.location.href = `/download-batch/${jobId}`;
+          
+          // Open notification panel so the completed message pops up visually in the UI
+          document.getElementById('notificationPanel').style.display = 'block';
+          
+          // Pop up completion message
+          alert(`Translation Completed - ${total} documents translated successfully.`);
+>>>>>>> 61b64a592c23534302cfe0d41441b87f8e235ebd
         }
       });
     }, 1500);
@@ -2527,8 +2539,10 @@
       // Update form highlights metadata
       const wEl = document.getElementById('metaWords');
       const mEl = document.getElementById('metaMasked');
+      const cEl = document.getElementById('metaConfidence');
       if (wEl) wEl.textContent = "{{ total_words }}";
       if (mEl) mEl.textContent = "{{ masked_words }}";
+      if (cEl) cEl.textContent = "{{ confidence_score }}%";
       
       // Put text into raw output
       const rawOut = document.getElementById('rawOutputBox');
@@ -2537,6 +2551,10 @@
 
     // Configure single file download button if a document was translated
     {% if filename_used and filename_used != "Text Input" and filename_used != "Text Box Input" %}
+      const docStatus = document.getElementById('documentStatus');
+      if (docStatus) {
+        docStatus.innerHTML = `<strong>{{ filename_used }}</strong> translated successfully.<br>Confidence Score: <strong>{{ confidence_score }}%</strong>`;
+      }
       const downloadBtn = document.getElementById('btnDownloadDocument');
       if (downloadBtn) {
         downloadBtn.style.display = 'inline-block';

@@ -1214,7 +1214,7 @@ def upload():
     total_words = 0
     selected_engine = 'google'
     department = session.get('department', 'Engineering')
-    username = session.get('username', 'Guest')
+    confidence_score = None
 
     if request.method == 'POST':
         file = request.files.get('document')
@@ -1243,6 +1243,7 @@ def upload():
                     translated = f"Translation completed for {filename_used}. Download your translated file below."
 
                 total_words = p_words
+                confidence_score = p_confidence
             except Exception as e:
                 error = f"Translation failed: {e}"
 
@@ -1253,7 +1254,8 @@ def upload():
         filename=filename_used,
         direction=direction,
         badge_text=badge_text,
-        total_words=total_words
+        total_words=total_words,
+        confidence_score=confidence_score
     )
 
 @app.route('/', methods=['GET', 'POST'])
