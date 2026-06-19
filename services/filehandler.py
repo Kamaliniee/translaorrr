@@ -255,7 +255,6 @@ def translate_file(input_path, output_path, direction, engine, department, gloss
 
         elif ext == '.pdf':
             try:
-<<<<<<< HEAD
                 pdf_reader = PdfReader(input_path)
                 
                 # Extract text from all pages
@@ -303,8 +302,6 @@ def translate_file(input_path, output_path, direction, engine, department, gloss
                     doc.build(story)
                 else:
                     shutil.copy(input_path, output_path)
-                    
-=======
                 import fitz
                 doc = fitz.open(input_path)
                 for page in doc:
@@ -336,7 +333,6 @@ def translate_file(input_path, output_path, direction, engine, department, gloss
                                         confidence = min(confidence, conf)
                 doc.save(output_path)
                 doc.close()
->>>>>>> 61b64a592c23534302cfe0d41441b87f8e235ebd
             except Exception as e:
                 print(f"Error translating PDF file {input_path} with PyMuPDF: {e}")
                 # Fallback to copy-only if fitz/PyMuPDF fails
