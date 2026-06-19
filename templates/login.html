@@ -6,12 +6,19 @@
   <title>DocTranslate — Login</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+  <link href="https://db.onlinewebfonts.com/c/d29ba033bd591441ba31f6aa7054787f?family=KareliaWeb+Regular" rel="stylesheet" type="text/css"/>
   <style>
+    @font-face {
+      font-family: 'KareliaWeb';
+      src: url('https://db.onlinewebfonts.com/t/d29ba033bd591441ba31f6aa7054787f.woff2') format('woff2'),
+           url('https://db.onlinewebfonts.com/t/d29ba033bd591441ba31f6aa7054787f.woff') format('woff'),
+           url('https://db.onlinewebfonts.com/t/d29ba033bd591441ba31f6aa7054787f.ttf') format('truetype');
+      font-display: swap;
+    }
     :root {
       --primary:#dc2626; --accent:#dc2626; --accent-bg:#fef2f2;
       --accent-mid:#fecaca; --muted:#64748b; --border:#e2e8f0;
-      --surface:#fff; --success:#059669; --font:'Sora',sans-serif;
+      --surface:#fff; --success:#059669; --font:'KareliaWeb',sans-serif;
     }
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
     input[type="radio"]{display:none;}
@@ -23,7 +30,7 @@
     .logo-box{width:36px;height:36px;background:var(--primary);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
     .logo-box i{color:#fff;font-size:18px;}
 
-    .brand-name{font-family:'DM Serif Display',serif;font-size:19px;color:var(--primary);}
+    .brand-name{font-family:'KareliaWeb',serif;font-size:19px;color:var(--primary);}
 
     .auth-tabs{display:flex;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:3px;gap:2px;}
     .auth-tab{flex:1;border:none;background:transparent;padding:9px;font-family:var(--font);font-size:13px;font-weight:500;color:var(--muted);border-radius:9px;cursor:pointer;transition:all .15s;}
@@ -88,6 +95,9 @@
     .quick-act i{font-size:16px;color:var(--accent);flex-shrink:0;}
     .quick-act span{font-weight:500;}
   </style>
+  {% if captcha_needed %}
+  <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+  {% endif %}
 </head>
 <body>
 <div class="auth-card">
@@ -122,6 +132,11 @@
           </div>
           <a href="{{ url_for('forgot_password') }}" class="forgot-btn text-decoration-none">Forgot password?</a>
         </div>
+        {% if captcha_needed %}
+        <div class="mb-3 d-flex justify-content-center">
+          <div class="g-recaptcha" data-sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXFtoM"></div>
+        </div>
+        {% endif %}
         {% if error and active_tab != 'register' %}
         <div class="alert alert-danger py-2 mb-3" id="signinErrorBox">{{ error }}</div>
         {% else %}
@@ -220,7 +235,7 @@ document.addEventListener('DOMContentLoaded', function() {
     color: #fff;
     padding: 14px 24px 14px 18px;
     border-radius: 14px;
-    font-family: 'Sora', sans-serif;
+    font-family: 'KareliaWeb', sans-serif;
     font-size: 14px;
     font-weight: 600;
     display: flex;
@@ -288,6 +303,13 @@ document.addEventListener('DOMContentLoaded', function() {
       showLoginToast('Inputs are blank — cannot process. Please enter your password.');
       if (p) p.focus();
       return false;
+    }
+    if (typeof grecaptcha !== 'undefined') {
+      var response = grecaptcha.getResponse();
+      if (response.length === 0) {
+        showLoginToast('Please complete the CAPTCHA.');
+        return false;
+      }
     }
     return true;
   }
